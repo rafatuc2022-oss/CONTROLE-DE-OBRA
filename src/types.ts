@@ -29,6 +29,14 @@ export interface Entrada {
   observacao?: string;
 }
 
+export interface PagamentoMaoObra {
+  id: string;
+  valor: number;
+  data: string;
+  formaPagamento: string;
+  observacao?: string;
+}
+
 export interface Saida {
   id: string;
   obraId: string;
@@ -37,6 +45,8 @@ export interface Saida {
   categoria: 'Material' | 'Mão de obra' | 'Transporte' | 'Ferramentas' | 'Alimentação' | 'Outros';
   descricao: string;
   observacao?: string;
+  maoObraId?: string;
+  paymentId?: string;
 }
 
 export interface MaoObra {
@@ -44,12 +54,14 @@ export interface MaoObra {
   obraId: string;
   nome: string;
   funcao: string;
-  valor: number;
+  valor: number; // For backward compatibility/legacy fallback
+  valorContrato: number; // Total budget charged by the professional
   dataPagamento: string;
-  formaPagamento: string; // e.g. Pix, Dinheiro, Transferência, etc.
+  formaPagamento: string; // Default/initial payment method
   observacao?: string;
   cpf?: string;
   telefone?: string;
+  pagamentos?: PagamentoMaoObra[];
 }
 
 export interface Material {

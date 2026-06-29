@@ -126,6 +126,9 @@ export default function App() {
     addMaoObra,
     updateMaoObra,
     deleteMaoObra,
+    addMaoObraVale,
+    deleteMaoObraVale,
+    updateMaoObraVale,
     addMaterial,
     updateMaterial,
     deleteMaterial,
@@ -563,6 +566,9 @@ export default function App() {
                     onAddMaoObra={addMaoObra}
                     onUpdateMaoObra={updateMaoObra}
                     onDeleteMaoObra={deleteMaoObra}
+                    onAddMaoObraVale={addMaoObraVale}
+                    onDeleteMaoObraVale={deleteMaoObraVale}
+                    onUpdateMaoObraVale={updateMaoObraVale}
                   />
                 )}
 

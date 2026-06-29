@@ -11,6 +11,7 @@ import {
   Edit2
 } from 'lucide-react';
 import { Obra, Material, CATEGORIAS_MATERIAIS, UNIDADES } from '../types';
+import { useNotification } from '../context/NotificationContext';
 
 interface MateriaisViewProps {
   obra: Obra;
@@ -27,6 +28,7 @@ export default function MateriaisView({
   onUpdateMaterial,
   onDeleteMaterial
 }: MateriaisViewProps) {
+  const { confirmAction } = useNotification();
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -463,8 +465,15 @@ export default function MateriaisView({
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => {
-                              if (confirm('Excluir este lançamento de material? O saldo da obra e o comparador de preços serão atualizados.')) {
+                            onClick={async () => {
+                              const confirmed = await confirmAction({
+                                title: 'Excluir Lançamento de Material',
+                                message: `Tem certeza que deseja excluir o lançamento do material "${item.nome}"? O saldo da obra e o comparador de preços serão atualizados.`,
+                                confirmText: 'Confirmar Exclusão',
+                                cancelText: 'Cancelar',
+                                variant: 'danger'
+                              });
+                              if (confirmed) {
                                 onDeleteMaterial(item);
                               }
                             }}
@@ -529,8 +538,15 @@ export default function MateriaisView({
                       <Edit2 className="w-3.5 h-3.5" /> Editar
                     </button>
                     <button
-                      onClick={() => {
-                        if (confirm('Excluir este lançamento de material? O saldo da obra e o comparador de preços serão atualizados.')) {
+                      onClick={async () => {
+                        const confirmed = await confirmAction({
+                          title: 'Excluir Lançamento de Material',
+                          message: `Tem certeza que deseja excluir o lançamento do material "${item.nome}"? O saldo da obra e o comparador de preços serão atualizados.`,
+                          confirmText: 'Confirmar Exclusão',
+                          cancelText: 'Cancelar',
+                          variant: 'danger'
+                        });
+                        if (confirmed) {
                           onDeleteMaterial(item);
                         }
                       }}

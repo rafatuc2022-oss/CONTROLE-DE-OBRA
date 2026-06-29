@@ -31,22 +31,19 @@ service cloud.firestore {
 
     // Entity Validations (Type Safety & Boundary Limits)
     function isValidUsuario(data) {
-      return data.id is string && data.id.size() <= 128
-        && data.nome is string && data.nome.size() <= 200
+      return data.nome is string && data.nome.size() <= 200
         && data.email is string && data.email.size() <= 200;
     }
 
     function isValidObra(data) {
-      return data.id is string && data.id.size() <= 128
-        && data.usuarioId is string && data.usuarioId.size() <= 128
+      return data.usuarioId is string && data.usuarioId.size() <= 128
         && data.nome is string && data.nome.size() <= 200
         && data.saldoInicial is number
         && data.saldoAtual is number;
     }
 
     function isValidEntrada(data) {
-      return data.id is string && data.id.size() <= 128
-        && data.obraId is string && data.obraId.size() <= 128
+      return data.obraId is string && data.obraId.size() <= 128
         && data.valor is number && data.valor >= 0
         && data.data is string && data.data.size() <= 50
         && data.origem is string && data.origem.size() <= 200
@@ -54,27 +51,28 @@ service cloud.firestore {
     }
 
     function isValidSaida(data) {
-      return data.id is string && data.id.size() <= 128
-        && data.obraId is string && data.obraId.size() <= 128
+      return data.obraId is string && data.obraId.size() <= 128
         && data.valor is number && data.valor >= 0
         && data.data is string && data.data.size() <= 50
         && data.categoria is string && data.categoria.size() <= 100
-        && data.descricao is string && data.descricao.size() <= 500;
+        && data.descricao is string && data.descricao.size() <= 500
+        && (!('maoObraId' in data) || data.maoObraId is string)
+        && (!('paymentId' in data) || data.paymentId is string);
     }
 
     function isValidMaoObra(data) {
-      return data.id is string && data.id.size() <= 128
-        && data.obraId is string && data.obraId.size() <= 128
+      return data.obraId is string && data.obraId.size() <= 128
         && data.nome is string && data.nome.size() <= 200
         && data.funcao is string && data.funcao.size() <= 100
         && data.valor is number && data.valor >= 0
         && data.dataPagamento is string && data.dataPagamento.size() <= 50
-        && data.formaPagamento is string && data.formaPagamento.size() <= 100;
+        && data.formaPagamento is string && data.formaPagamento.size() <= 100
+        && (!('valorContrato' in data) || data.valorContrato is number)
+        && (!('pagamentos' in data) || data.pagamentos is list);
     }
 
     function isValidMaterial(data) {
-      return data.id is string && data.id.size() <= 128
-        && data.obraId is string && data.obraId.size() <= 128
+      return data.obraId is string && data.obraId.size() <= 128
         && data.categoria is string && data.categoria.size() <= 100
         && data.nome is string && data.nome.size() <= 200
         && data.quantidade is number && data.quantidade >= 0
@@ -86,8 +84,7 @@ service cloud.firestore {
     }
 
     function isValidComparacaoPreco(data) {
-      return data.id is string && data.id.size() <= 128
-        && data.usuarioId is string && data.usuarioId.size() <= 128
+      return data.usuarioId is string && data.usuarioId.size() <= 128
         && data.material is string && data.material.size() <= 200
         && data.loja is string && data.loja.size() <= 200
         && data.valor is number && data.valor >= 0

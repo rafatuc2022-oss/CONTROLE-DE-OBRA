@@ -13,6 +13,7 @@ import {
   Edit2
 } from 'lucide-react';
 import { Obra, Entrada, Saida, CATEGORIAS_SAIDAS } from '../types';
+import { useNotification } from '../context/NotificationContext';
 
 interface FinanceiroViewProps {
   obra: Obra;
@@ -37,6 +38,7 @@ export default function FinanceiroView({
   onUpdateSaida,
   onDeleteSaida
 }: FinanceiroViewProps) {
+  const { confirmAction } = useNotification();
   const [activeTab, setActiveTab] = useState<'tudo' | 'entradas' | 'saidas'>('tudo');
   const [showAddForm, setShowAddForm] = useState<'entrada' | 'saida' | null>(null);
   const [editingItem, setEditingItem] = useState<any>(null);
@@ -524,8 +526,15 @@ export default function FinanceiroView({
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => {
-                              if (confirm('Excluir este lançamento financeiro? O saldo da obra será atualizado.')) {
+                            onClick={async () => {
+                              const confirmed = await confirmAction({
+                                title: 'Excluir Lançamento',
+                                message: `Tem certeza que deseja excluir este lançamento financeiro de R$ ${item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}? O saldo da obra será atualizado e recalculado automaticamente.`,
+                                confirmText: 'Confirmar Exclusão',
+                                cancelText: 'Cancelar',
+                                variant: 'danger'
+                              });
+                              if (confirmed) {
                                 if (item.tipo === 'entrada') onDeleteEntrada(item);
                                 else onDeleteSaida(item);
                               }
@@ -595,8 +604,15 @@ export default function FinanceiroView({
                       <Edit2 className="w-3.5 h-3.5" /> Editar
                     </button>
                     <button
-                      onClick={() => {
-                        if (confirm('Excluir este lançamento financeiro? O saldo da obra será atualizado.')) {
+                      onClick={async () => {
+                        const confirmed = await confirmAction({
+                          title: 'Excluir Lançamento',
+                          message: `Tem certeza que deseja excluir este lançamento de R$ ${item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}? O saldo da obra será atualizado e recalculado automaticamente.`,
+                          confirmText: 'Confirmar Exclusão',
+                          cancelText: 'Cancelar',
+                          variant: 'danger'
+                        });
+                        if (confirmed) {
                           if (item.tipo === 'entrada') onDeleteEntrada(item);
                           else onDeleteSaida(item);
                         }

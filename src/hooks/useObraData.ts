@@ -13,9 +13,11 @@ import {
   getDoc
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Obra, Entrada, Saida, MaoObra, Material, ComparacaoPreco } from '../types';
+import { Obra, Entrada, Saida, MaoObra, Material, ComparacaoPreco, PagamentoMaoObra } from '../types';
+import { useNotification } from '../context/NotificationContext';
 
 export function useObraData(userId: string | null) {
+  const { showToast } = useNotification();
   const [obras, setObras] = useState<Obra[]>([]);
   const [selectedObraId, setSelectedObraId] = useState<string | null>(null);
   const [entradas, setEntradas] = useState<Entrada[]>([]);
@@ -165,232 +167,491 @@ export function useObraData(userId: string | null) {
   // 4. Data Operations
   const addObra = async (obraData: Omit<Obra, 'id' | 'usuarioId' | 'saldoAtual' | 'criadoEm'>) => {
     if (!userId) return;
-    const newObra = {
-      ...obraData,
-      usuarioId: userId,
-      saldoAtual: obraData.saldoInicial,
-      criadoEm: new Date().toISOString()
-    };
-    return await addDoc(collection(db, 'obras'), newObra);
+    try {
+      const newObra = {
+        ...obraData,
+        usuarioId: userId,
+        saldoAtual: obraData.saldoInicial,
+        criadoEm: new Date().toISOString()
+      };
+      const docRef = await addDoc(collection(db, 'obras'), newObra);
+      showToast('Nova obra cadastrada com sucesso!', 'success');
+      return docRef;
+    } catch (err: any) {
+      showToast('Erro ao cadastrar obra: ' + err.message, 'error');
+      throw err;
+    }
   };
 
   const updateObra = async (obraId: string, updateFields: Partial<Obra>) => {
-    await updateDoc(doc(db, 'obras', obraId), updateFields);
+    try {
+      await updateDoc(doc(db, 'obras', obraId), updateFields);
+      showToast('Dados da obra atualizados!', 'success');
+    } catch (err: any) {
+      showToast('Erro ao atualizar obra: ' + err.message, 'error');
+      throw err;
+    }
   };
 
   const deleteObra = async (obraId: string) => {
-    await deleteDoc(doc(db, 'obras', obraId));
-    if (selectedObraId === obraId) {
-      const remaining = obras.filter(o => o.id !== obraId);
-      setSelectedObraId(remaining.length > 0 ? remaining[0].id : null);
+    try {
+      await deleteDoc(doc(db, 'obras', obraId));
+      if (selectedObraId === obraId) {
+        const remaining = obras.filter(o => o.id !== obraId);
+        setSelectedObraId(remaining.length > 0 ? remaining[0].id : null);
+      }
+      showToast('Obra excluída com sucesso!', 'success');
+    } catch (err: any) {
+      showToast('Erro ao excluir obra: ' + err.message, 'error');
+      throw err;
     }
   };
 
   const addEntrada = async (entrada: Omit<Entrada, 'id'>) => {
-    const docRef = await addDoc(collection(db, 'entradas'), entrada);
-    // Trigger balance update
-    setTimeout(() => updateProjectBalance(entrada.obraId), 200);
-    return docRef;
+    try {
+      const docRef = await addDoc(collection(db, 'entradas'), entrada);
+      // Trigger balance update
+      setTimeout(() => updateProjectBalance(entrada.obraId), 200);
+      showToast('Entrada financeira registrada com sucesso!', 'success');
+      return docRef;
+    } catch (err: any) {
+      showToast('Erro ao registrar entrada: ' + err.message, 'error');
+      throw err;
+    }
   };
 
   const deleteEntrada = async (entrada: Entrada) => {
-    await deleteDoc(doc(db, 'entradas', entrada.id));
-    setTimeout(() => updateProjectBalance(entrada.obraId), 200);
+    try {
+      await deleteDoc(doc(db, 'entradas', entrada.id));
+      setTimeout(() => updateProjectBalance(entrada.obraId), 200);
+      showToast('Entrada financeira removida com sucesso!', 'success');
+    } catch (err: any) {
+      showToast('Erro ao remover entrada: ' + err.message, 'error');
+      throw err;
+    }
   };
 
   const addSaida = async (saida: Omit<Saida, 'id'>) => {
-    const docRef = await addDoc(collection(db, 'saidas'), saida);
-    setTimeout(() => updateProjectBalance(saida.obraId), 200);
-    return docRef;
+    try {
+      const docRef = await addDoc(collection(db, 'saidas'), saida);
+      setTimeout(() => updateProjectBalance(saida.obraId), 200);
+      showToast('Saída/Despesa financeira registrada!', 'success');
+      return docRef;
+    } catch (err: any) {
+      showToast('Erro ao registrar saída: ' + err.message, 'error');
+      throw err;
+    }
   };
 
   const deleteSaida = async (saida: Saida) => {
-    await deleteDoc(doc(db, 'saidas', saida.id));
-    setTimeout(() => updateProjectBalance(saida.obraId), 200);
+    try {
+      await deleteDoc(doc(db, 'saidas', saida.id));
+      setTimeout(() => updateProjectBalance(saida.obraId), 200);
+      showToast('Despesa financeira removida!', 'success');
+    } catch (err: any) {
+      showToast('Erro ao excluir despesa: ' + err.message, 'error');
+      throw err;
+    }
   };
 
   const addMaoObra = async (record: Omit<MaoObra, 'id'>) => {
-    const docRef = await addDoc(collection(db, 'maoObra'), record);
-    // Add corresponding financial outcome automatically
-    const saidaRecord = {
-      obraId: record.obraId,
-      valor: record.valor,
-      data: record.dataPagamento,
-      categoria: 'Mão de obra' as const,
-      descricao: `Mão de obra: ${record.nome} (${record.funcao})`,
-      observacao: record.observacao || ''
-    };
-    await addDoc(collection(db, 'saidas'), saidaRecord);
-    setTimeout(() => updateProjectBalance(record.obraId), 200);
-    return docRef;
+    try {
+      const newRecord = {
+        ...record,
+        valor: record.valor || 0,
+        valorContrato: record.valorContrato || record.valor || 0,
+        pagamentos: record.pagamentos || []
+      };
+      const docRef = await addDoc(collection(db, 'maoObra'), newRecord);
+      
+      // If there are initial payments, add them to saidas
+      if (newRecord.pagamentos && newRecord.pagamentos.length > 0) {
+        for (const p of newRecord.pagamentos) {
+          const saidaRecord = {
+            obraId: record.obraId,
+            valor: p.valor,
+            data: p.data,
+            categoria: 'Mão de obra' as const,
+            descricao: `Vale/Pgto: ${record.nome} (${record.funcao})`,
+            observacao: p.observacao || '',
+            maoObraId: docRef.id,
+            paymentId: p.id
+          };
+          await addDoc(collection(db, 'saidas'), saidaRecord);
+        }
+      }
+      
+      setTimeout(() => updateProjectBalance(record.obraId), 200);
+      showToast(`Profissional ${record.nome} cadastrado com sucesso!`, 'success');
+      return docRef;
+    } catch (err: any) {
+      showToast('Erro ao cadastrar profissional: ' + err.message, 'error');
+      throw err;
+    }
   };
 
   const deleteMaoObra = async (record: MaoObra) => {
-    await deleteDoc(doc(db, 'maoObra', record.id));
-    
-    // Find matching outcome in our current state list to delete it as well
-    const matchingSaida = saidas.find(s => 
-      s.obraId === record.obraId && 
-      s.categoria === 'Mão de obra' &&
-      s.valor === record.valor &&
-      s.data === record.dataPagamento
-    );
-    if (matchingSaida) {
-      await deleteDoc(doc(db, 'saidas', matchingSaida.id));
-    }
+    try {
+      await deleteDoc(doc(db, 'maoObra', record.id));
+      
+      // Find all matching outcomes (saidas) linked to this labor record to delete them all
+      const matchingSaidasQuery = query(collection(db, 'saidas'), where('maoObraId', '==', record.id));
+      const matchingSaidasSnap = await getDocs(matchingSaidasQuery);
+      for (const d of matchingSaidasSnap.docs) {
+        await deleteDoc(doc(db, 'saidas', d.id));
+      }
 
-    setTimeout(() => updateProjectBalance(record.obraId), 200);
+      // Legacy support: if there are outcomes that matched by name/value but did not have maoObraId
+      const legacySaidas = saidas.filter(s => 
+        s.obraId === record.obraId && 
+        s.categoria === 'Mão de obra' &&
+        !s.maoObraId &&
+        s.valor === record.valor &&
+        s.data === record.dataPagamento
+      );
+      for (const ls of legacySaidas) {
+        await deleteDoc(doc(db, 'saidas', ls.id));
+      }
+
+      setTimeout(() => updateProjectBalance(record.obraId), 200);
+      showToast(`Profissional ${record.nome} removido do sistema!`, 'success');
+    } catch (err: any) {
+      showToast('Erro ao excluir profissional: ' + err.message, 'error');
+      throw err;
+    }
   };
 
   const addMaterial = async (record: Omit<Material, 'id'>) => {
-    const docRef = await addDoc(collection(db, 'materiais'), record);
-    // Add to Comparador de Preços database
-    const compRecord = {
-      usuarioId: userId || '',
-      material: record.nome,
-      loja: record.loja,
-      valor: record.valorUnitario,
-      data: record.dataCompra
-    };
-    await addDoc(collection(db, 'comparacaoPrecos'), compRecord);
+    try {
+      const docRef = await addDoc(collection(db, 'materiais'), record);
+      // Add to Comparador de Preços database
+      const compRecord = {
+        usuarioId: userId || '',
+        material: record.nome,
+        loja: record.loja,
+        valor: record.valorUnitario,
+        data: record.dataCompra
+      };
+      await addDoc(collection(db, 'comparacaoPrecos'), compRecord);
 
-    // Add corresponding financial outcome automatically
-    const saidaRecord = {
-      obraId: record.obraId,
-      valor: record.valorTotal,
-      data: record.dataCompra,
-      categoria: 'Material' as const,
-      descricao: `Material: ${record.nome} (${record.quantidade} ${record.unidade})`,
-      observacao: record.observacao || ''
-    };
-    await addDoc(collection(db, 'saidas'), saidaRecord);
-    setTimeout(() => updateProjectBalance(record.obraId), 200);
-    return docRef;
+      // Add corresponding financial outcome automatically
+      const saidaRecord = {
+        obraId: record.obraId,
+        valor: record.valorTotal,
+        data: record.dataCompra,
+        categoria: 'Material' as const,
+        descricao: `Material: ${record.nome} (${record.quantidade} ${record.unidade})`,
+        observacao: record.observacao || ''
+      };
+      await addDoc(collection(db, 'saidas'), saidaRecord);
+      setTimeout(() => updateProjectBalance(record.obraId), 200);
+      showToast(`Material ${record.nome} cadastrado com sucesso!`, 'success');
+      return docRef;
+    } catch (err: any) {
+      showToast('Erro ao cadastrar material: ' + err.message, 'error');
+      throw err;
+    }
   };
 
   const deleteMaterial = async (record: Material) => {
-    await deleteDoc(doc(db, 'materiais', record.id));
+    try {
+      await deleteDoc(doc(db, 'materiais', record.id));
 
-    // Find matching outcome in our current state list to delete it as well
-    const matchingSaida = saidas.find(s => 
-      s.obraId === record.obraId && 
-      s.categoria === 'Material' &&
-      s.valor === record.valorTotal &&
-      s.data === record.dataCompra
-    );
-    if (matchingSaida) {
-      await deleteDoc(doc(db, 'saidas', matchingSaida.id));
+      // Find matching outcome in our current state list to delete it as well
+      const matchingSaida = saidas.find(s => 
+        s.obraId === record.obraId && 
+        s.categoria === 'Material' &&
+        s.valor === record.valorTotal &&
+        s.data === record.dataCompra
+      );
+      if (matchingSaida) {
+        await deleteDoc(doc(db, 'saidas', matchingSaida.id));
+      }
+
+      // Also delete from price comparisons database if matching
+      const matchingComp = comparacoes.find(c => 
+        c.material === record.nome && 
+        c.loja === record.loja && 
+        c.valor === record.valorUnitario &&
+        c.data === record.dataCompra
+      );
+      if (matchingComp) {
+        await deleteDoc(doc(db, 'comparacaoPrecos', matchingComp.id));
+      }
+
+      setTimeout(() => updateProjectBalance(record.obraId), 200);
+      showToast(`Material ${record.nome} excluído com sucesso!`, 'success');
+    } catch (err: any) {
+      showToast('Erro ao excluir material: ' + err.message, 'error');
+      throw err;
     }
-
-    // Also delete from price comparisons database if matching
-    const matchingComp = comparacoes.find(c => 
-      c.material === record.nome && 
-      c.loja === record.loja && 
-      c.valor === record.valorUnitario &&
-      c.data === record.dataCompra
-    );
-    if (matchingComp) {
-      await deleteDoc(doc(db, 'comparacaoPrecos', matchingComp.id));
-    }
-
-    setTimeout(() => updateProjectBalance(record.obraId), 200);
   };
 
   const updateEntrada = async (id: string, updatedFields: Partial<Entrada>) => {
-    await updateDoc(doc(db, 'entradas', id), updatedFields);
-    const obraId = updatedFields.obraId || (entradas.find(e => e.id === id)?.obraId);
-    if (obraId) {
-      setTimeout(() => updateProjectBalance(obraId), 200);
+    try {
+      await updateDoc(doc(db, 'entradas', id), updatedFields);
+      const obraId = updatedFields.obraId || (entradas.find(e => e.id === id)?.obraId);
+      if (obraId) {
+        setTimeout(() => updateProjectBalance(obraId), 200);
+      }
+      showToast('Entrada financeira atualizada com sucesso!', 'success');
+    } catch (err: any) {
+      showToast('Erro ao atualizar entrada: ' + err.message, 'error');
+      throw err;
     }
   };
 
   const updateSaida = async (id: string, updatedFields: Partial<Saida>) => {
-    await updateDoc(doc(db, 'saidas', id), updatedFields);
-    const obraId = updatedFields.obraId || (saidas.find(s => s.id === id)?.obraId);
-    if (obraId) {
-      setTimeout(() => updateProjectBalance(obraId), 200);
+    try {
+      await updateDoc(doc(db, 'saidas', id), updatedFields);
+      const obraId = updatedFields.obraId || (saidas.find(s => s.id === id)?.obraId);
+      if (obraId) {
+        setTimeout(() => updateProjectBalance(obraId), 200);
+      }
+      showToast('Saída financeira atualizada com sucesso!', 'success');
+    } catch (err: any) {
+      showToast('Erro ao atualizar saída: ' + err.message, 'error');
+      throw err;
     }
   };
 
   const updateMaoObra = async (id: string, updatedFields: Partial<MaoObra>, originalRecord: MaoObra) => {
-    await updateDoc(doc(db, 'maoObra', id), updatedFields);
-    
-    // Find matching output (saida) to update as well
-    const matchingSaida = saidas.find(s => 
-      s.obraId === originalRecord.obraId && 
-      s.categoria === 'Mão de obra' &&
-      s.valor === originalRecord.valor &&
-      s.data === originalRecord.dataPagamento
-    );
-    if (matchingSaida) {
-      const updatedSaida = {
-        obraId: updatedFields.obraId || originalRecord.obraId,
-        valor: updatedFields.valor !== undefined ? updatedFields.valor : originalRecord.valor,
-        data: updatedFields.dataPagamento || originalRecord.dataPagamento,
-        categoria: 'Mão de obra' as const,
-        descricao: `Mão de obra: ${updatedFields.nome || originalRecord.nome} (${updatedFields.funcao || originalRecord.funcao})`,
-        observacao: updatedFields.observacao !== undefined ? updatedFields.observacao : originalRecord.observacao || ''
-      };
-      await updateDoc(doc(db, 'saidas', matchingSaida.id), updatedSaida);
+    try {
+      await updateDoc(doc(db, 'maoObra', id), updatedFields);
+      
+      const nome = updatedFields.nome || originalRecord.nome;
+      const funcao = updatedFields.funcao || originalRecord.funcao;
+
+      // Find all matching outputs (saidas) that have this maoObraId to update their professional details
+      const matchingSaidasQuery = query(collection(db, 'saidas'), where('maoObraId', '==', id));
+      const matchingSaidasSnap = await getDocs(matchingSaidasQuery);
+      for (const d of matchingSaidasSnap.docs) {
+        await updateDoc(doc(db, 'saidas', d.id), {
+          obraId: updatedFields.obraId || originalRecord.obraId,
+          descricao: `Vale/Pgto: ${nome} (${funcao})`
+        });
+      }
+
+      // Legacy support: update legacy matching outcome if exists
+      const matchingSaida = saidas.find(s => 
+        s.obraId === originalRecord.obraId && 
+        s.categoria === 'Mão de obra' &&
+        !s.maoObraId &&
+        s.valor === originalRecord.valor &&
+        s.data === originalRecord.dataPagamento
+      );
+      if (matchingSaida) {
+        const updatedSaida = {
+          obraId: updatedFields.obraId || originalRecord.obraId,
+          valor: updatedFields.valor !== undefined ? updatedFields.valor : originalRecord.valor,
+          data: updatedFields.dataPagamento || originalRecord.dataPagamento,
+          categoria: 'Mão de obra' as const,
+          descricao: `Mão de obra: ${nome} (${funcao})`,
+          observacao: updatedFields.observacao !== undefined ? updatedFields.observacao : originalRecord.observacao || ''
+        };
+        await updateDoc(doc(db, 'saidas', matchingSaida.id), updatedSaida);
+      }
+      
+      const finalObraId = updatedFields.obraId || originalRecord.obraId;
+      setTimeout(() => updateProjectBalance(finalObraId), 200);
+      showToast(`Cadastro do profissional ${nome} atualizado com sucesso!`, 'success');
+    } catch (err: any) {
+      showToast('Erro ao atualizar profissional: ' + err.message, 'error');
+      throw err;
     }
-    
-    const finalObraId = updatedFields.obraId || originalRecord.obraId;
-    setTimeout(() => updateProjectBalance(finalObraId), 200);
+  };
+
+  const addMaoObraVale = async (maoObraId: string, vale: Omit<PagamentoMaoObra, 'id'>) => {
+    try {
+      const professionalRef = doc(db, 'maoObra', maoObraId);
+      const professionalSnap = await getDoc(professionalRef);
+      if (!professionalSnap.exists()) return;
+      const profData = professionalSnap.data() as MaoObra;
+      
+      const paymentId = 'vale_' + Math.random().toString(36).substr(2, 9);
+      const newVale: PagamentoMaoObra = {
+        ...vale,
+        id: paymentId
+      };
+      
+      const currentPagamentos = profData.pagamentos || [];
+      const updatedPagamentos = [...currentPagamentos, newVale];
+      const newTotalPaid = updatedPagamentos.reduce((sum, p) => sum + Number(p.valor), 0);
+      
+      await updateDoc(professionalRef, {
+        pagamentos: updatedPagamentos,
+        valor: newTotalPaid
+      });
+      
+      const saidaRecord = {
+        obraId: profData.obraId,
+        valor: vale.valor,
+        data: vale.data,
+        categoria: 'Mão de obra' as const,
+        descricao: `Vale/Pgto: ${profData.nome} (${profData.funcao})`,
+        observacao: vale.observacao || '',
+        maoObraId: maoObraId,
+        paymentId: paymentId
+      };
+      await addDoc(collection(db, 'saidas'), saidaRecord);
+      
+      setTimeout(() => updateProjectBalance(profData.obraId), 200);
+      showToast('Vale registrado com sucesso!', 'success');
+    } catch (err: any) {
+      showToast('Erro ao registrar vale: ' + err.message, 'error');
+      throw err;
+    }
+  };
+
+  const deleteMaoObraVale = async (maoObraId: string, paymentId: string) => {
+    try {
+      const professionalRef = doc(db, 'maoObra', maoObraId);
+      const professionalSnap = await getDoc(professionalRef);
+      if (!professionalSnap.exists()) return;
+      const profData = professionalSnap.data() as MaoObra;
+      
+      const currentPagamentos = profData.pagamentos || [];
+      const updatedPagamentos = currentPagamentos.filter(p => p.id !== paymentId);
+      const newTotalPaid = updatedPagamentos.reduce((sum, p) => sum + Number(p.valor), 0);
+      
+      await updateDoc(professionalRef, {
+        pagamentos: updatedPagamentos,
+        valor: newTotalPaid
+      });
+      
+      const matchingSaidasQuery = query(
+        collection(db, 'saidas'), 
+        where('maoObraId', '==', maoObraId),
+        where('paymentId', '==', paymentId)
+      );
+      const matchingSaidasSnap = await getDocs(matchingSaidasQuery);
+      for (const d of matchingSaidasSnap.docs) {
+        await deleteDoc(doc(db, 'saidas', d.id));
+      }
+      
+      setTimeout(() => updateProjectBalance(profData.obraId), 200);
+      showToast('Vale excluído com sucesso!', 'success');
+    } catch (err: any) {
+      showToast('Erro ao excluir vale: ' + err.message, 'error');
+      throw err;
+    }
+  };
+
+  const updateMaoObraVale = async (maoObraId: string, paymentId: string, updatedFields: Partial<PagamentoMaoObra>) => {
+    try {
+      const professionalRef = doc(db, 'maoObra', maoObraId);
+      const professionalSnap = await getDoc(professionalRef);
+      if (!professionalSnap.exists()) return;
+      const profData = professionalSnap.data() as MaoObra;
+      
+      const currentPagamentos = profData.pagamentos || [];
+      const updatedPagamentos = currentPagamentos.map(p => {
+        if (p.id === paymentId) {
+          return { ...p, ...updatedFields };
+        }
+        return p;
+      });
+      const newTotalPaid = updatedPagamentos.reduce((sum, p) => sum + Number(p.valor), 0);
+      
+      await updateDoc(professionalRef, {
+        pagamentos: updatedPagamentos,
+        valor: newTotalPaid
+      });
+      
+      const matchingSaidasQuery = query(
+        collection(db, 'saidas'), 
+        where('maoObraId', '==', maoObraId),
+        where('paymentId', '==', paymentId)
+      );
+      const matchingSaidasSnap = await getDocs(matchingSaidasQuery);
+      for (const d of matchingSaidasSnap.docs) {
+        await updateDoc(doc(db, 'saidas', d.id), {
+          valor: updatedFields.valor !== undefined ? updatedFields.valor : d.data().valor,
+          data: updatedFields.data || d.data().data,
+          observacao: updatedFields.observacao !== undefined ? updatedFields.observacao : d.data().observacao || ''
+        });
+      }
+      
+      setTimeout(() => updateProjectBalance(profData.obraId), 200);
+      showToast('Vale atualizado com sucesso!', 'success');
+    } catch (err: any) {
+      showToast('Erro ao atualizar vale: ' + err.message, 'error');
+      throw err;
+    }
   };
 
   const updateMaterial = async (id: string, updatedFields: Partial<Material>, originalRecord: Material) => {
-    await updateDoc(doc(db, 'materiais', id), updatedFields);
-    
-    // Find matching output (saida) to update
-    const matchingSaida = saidas.find(s => 
-      s.obraId === originalRecord.obraId && 
-      s.categoria === 'Material' &&
-      s.valor === originalRecord.valorTotal &&
-      s.data === originalRecord.dataCompra
-    );
-    if (matchingSaida) {
-      const updatedSaida = {
-        obraId: updatedFields.obraId || originalRecord.obraId,
-        valor: updatedFields.valorTotal !== undefined ? updatedFields.valorTotal : originalRecord.valorTotal,
-        data: updatedFields.dataCompra || originalRecord.dataCompra,
-        categoria: 'Material' as const,
-        descricao: `Material: ${updatedFields.nome || originalRecord.nome} (${updatedFields.quantidade !== undefined ? updatedFields.quantidade : originalRecord.quantidade} ${updatedFields.unidade || originalRecord.unidade})`,
-        observacao: updatedFields.observacao !== undefined ? updatedFields.observacao : originalRecord.observacao || ''
-      };
-      await updateDoc(doc(db, 'saidas', matchingSaida.id), updatedSaida);
-    }
-    
-    // Find matching price comparison to update
-    const matchingComp = comparacoes.find(c => 
-      c.material === originalRecord.nome && 
-      c.loja === originalRecord.loja && 
-      c.valor === originalRecord.valorUnitario &&
-      c.data === originalRecord.dataCompra
-    );
-    if (matchingComp) {
-      const updatedComp = {
-        material: updatedFields.nome || originalRecord.nome,
-        loja: updatedFields.loja || originalRecord.loja,
-        valor: updatedFields.valorUnitario !== undefined ? updatedFields.valorUnitario : originalRecord.valorUnitario,
-        data: updatedFields.dataCompra || originalRecord.dataCompra
-      };
-      await updateDoc(doc(db, 'comparacaoPrecos', matchingComp.id), updatedComp);
-    }
+    try {
+      await updateDoc(doc(db, 'materiais', id), updatedFields);
+      
+      // Find matching output (saida) to update
+      const matchingSaida = saidas.find(s => 
+        s.obraId === originalRecord.obraId && 
+        s.categoria === 'Material' &&
+        s.valor === originalRecord.valorTotal &&
+        s.data === originalRecord.dataCompra
+      );
+      if (matchingSaida) {
+        const updatedSaida = {
+          obraId: updatedFields.obraId || originalRecord.obraId,
+          valor: updatedFields.valorTotal !== undefined ? updatedFields.valorTotal : originalRecord.valorTotal,
+          data: updatedFields.dataCompra || originalRecord.dataCompra,
+          categoria: 'Material' as const,
+          descricao: `Material: ${updatedFields.nome || originalRecord.nome} (${updatedFields.quantidade !== undefined ? updatedFields.quantidade : originalRecord.quantidade} ${updatedFields.unidade || originalRecord.unidade})`,
+          observacao: updatedFields.observacao !== undefined ? updatedFields.observacao : originalRecord.observacao || ''
+        };
+        await updateDoc(doc(db, 'saidas', matchingSaida.id), updatedSaida);
+      }
+      
+      // Find matching price comparison to update
+      const matchingComp = comparacoes.find(c => 
+        c.material === originalRecord.nome && 
+        c.loja === originalRecord.loja && 
+        c.valor === originalRecord.valorUnitario &&
+        c.data === originalRecord.dataCompra
+      );
+      if (matchingComp) {
+        const updatedComp = {
+          material: updatedFields.nome || originalRecord.nome,
+          loja: updatedFields.loja || originalRecord.loja,
+          valor: updatedFields.valorUnitario !== undefined ? updatedFields.valorUnitario : originalRecord.valorUnitario,
+          data: updatedFields.dataCompra || originalRecord.dataCompra
+        };
+        await updateDoc(doc(db, 'comparacaoPrecos', matchingComp.id), updatedComp);
+      }
 
-    const finalObraId = updatedFields.obraId || originalRecord.obraId;
-    setTimeout(() => updateProjectBalance(finalObraId), 200);
+      const finalObraId = updatedFields.obraId || originalRecord.obraId;
+      setTimeout(() => updateProjectBalance(finalObraId), 200);
+      showToast('Material atualizado com sucesso!', 'success');
+    } catch (err: any) {
+      showToast('Erro ao atualizar material: ' + err.message, 'error');
+      throw err;
+    }
   };
 
   const addComparacao = async (comp: Omit<ComparacaoPreco, 'id' | 'usuarioId'>) => {
     if (!userId) return;
-    return await addDoc(collection(db, 'comparacaoPrecos'), {
-      ...comp,
-      usuarioId: userId
-    });
+    try {
+      const docRef = await addDoc(collection(db, 'comparacaoPrecos'), {
+        ...comp,
+        usuarioId: userId
+      });
+      showToast('Preço adicionado ao comparador com sucesso!', 'success');
+      return docRef;
+    } catch (err: any) {
+      showToast('Erro ao adicionar preço: ' + err.message, 'error');
+      throw err;
+    }
   };
 
   const deleteComparacao = async (id: string) => {
-    await deleteDoc(doc(db, 'comparacaoPrecos', id));
+    try {
+      await deleteDoc(doc(db, 'comparacaoPrecos', id));
+      showToast('Preço removido com sucesso!', 'success');
+    } catch (err: any) {
+      showToast('Erro ao remover preço: ' + err.message, 'error');
+      throw err;
+    }
   };
 
   // Bootstrap custom initial sample data if a new user has no projects
@@ -564,6 +825,9 @@ export function useObraData(userId: string | null) {
     addMaoObra,
     updateMaoObra,
     deleteMaoObra,
+    addMaoObraVale,
+    deleteMaoObraVale,
+    updateMaoObraVale,
     addMaterial,
     updateMaterial,
     deleteMaterial,

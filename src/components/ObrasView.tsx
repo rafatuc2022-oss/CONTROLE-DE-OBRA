@@ -12,6 +12,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { Obra } from '../types';
+import { useNotification } from '../context/NotificationContext';
 
 interface ObrasViewProps {
   obras: Obra[];
@@ -32,6 +33,7 @@ export default function ObrasView({
   onDeleteObra,
   onBootstrap
 }: ObrasViewProps) {
+  const { confirmAction } = useNotification();
   const [isAdding, setIsAdding] = useState(false);
   const [isEditingId, setIsEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -349,8 +351,15 @@ export default function ObrasView({
                       <Edit className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => {
-                        if (confirm('Tem certeza de que deseja excluir permanentemente esta obra? Todos os dados vinculados serão deletados.')) {
+                      onClick={async () => {
+                        const confirmed = await confirmAction({
+                          title: 'Excluir Obra',
+                          message: `Tem certeza de que deseja excluir permanentemente a obra "${obra.nome}"? Todos os dados financeiros, materiais e profissionais vinculados serão excluídos de forma irreversível.`,
+                          confirmText: 'Excluir Obra',
+                          cancelText: 'Cancelar',
+                          variant: 'danger'
+                        });
+                        if (confirmed) {
                           onDeleteObra(obra.id);
                         }
                       }}

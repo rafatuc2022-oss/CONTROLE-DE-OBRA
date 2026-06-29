@@ -1,0 +1,6 @@
+{
+  "name": "ObraControl",
+  "description": "Aplicativo para controle financeiro de obras, registrando entradas, saídas, mão de obra, materiais e comparação de preços.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

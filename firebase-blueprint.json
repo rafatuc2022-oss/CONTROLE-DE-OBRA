@@ -1,0 +1,146 @@
+{
+  "entities": {
+    "Usuario": {
+      "title": "Usuario",
+      "description": "User profile document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nome": { "type": "string" },
+        "email": { "type": "string" },
+        "fotoPerfil": { "type": "string" }
+      },
+      "required": ["id", "nome", "email"]
+    },
+    "Obra": {
+      "title": "Obra",
+      "description": "Construction project document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "usuarioId": { "type": "string" },
+        "nome": { "type": "string" },
+        "cliente": { "type": "string" },
+        "endereco": { "type": "string" },
+        "saldoInicial": { "type": "number" },
+        "saldoAtual": { "type": "number" },
+        "dataInicio": { "type": "string" },
+        "dataTermino": { "type": "string" },
+        "observacoes": { "type": "string" },
+        "criadoEm": { "type": "string" }
+      },
+      "required": ["id", "usuarioId", "nome", "saldoInicial", "saldoAtual"]
+    },
+    "Entrada": {
+      "title": "Entrada",
+      "description": "Income entry for a construction project",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "obraId": { "type": "string" },
+        "valor": { "type": "number" },
+        "data": { "type": "string" },
+        "origem": { "type": "string" },
+        "descricao": { "type": "string" },
+        "observacao": { "type": "string" }
+      },
+      "required": ["id", "obraId", "valor", "data", "origem", "descricao"]
+    },
+    "Saida": {
+      "title": "Saida",
+      "description": "Expense entry for a construction project",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "obraId": { "type": "string" },
+        "valor": { "type": "number" },
+        "data": { "type": "string" },
+        "categoria": { "type": "string" },
+        "descricao": { "type": "string" },
+        "observacao": { "type": "string" }
+      },
+      "required": ["id", "obraId", "valor", "data", "categoria", "descricao"]
+    },
+    "MaoObra": {
+      "title": "MaoObra",
+      "description": "Labor payment record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "obraId": { "type": "string" },
+        "nome": { "type": "string" },
+        "funcao": { "type": "string" },
+        "valor": { "type": "number" },
+        "dataPagamento": { "type": "string" },
+        "formaPagamento": { "type": "string" },
+        "observacao": { "type": "string" }
+      },
+      "required": ["id", "obraId", "nome", "funcao", "valor", "dataPagamento", "formaPagamento"]
+    },
+    "Material": {
+      "title": "Material",
+      "description": "Material purchase record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "obraId": { "type": "string" },
+        "categoria": { "type": "string" },
+        "nome": { "type": "string" },
+        "descricao": { "type": "string" },
+        "quantidade": { "type": "number" },
+        "unidade": { "type": "string" },
+        "valorUnitario": { "type": "number" },
+        "valorTotal": { "type": "number" },
+        "loja": { "type": "string" },
+        "notaFiscal": { "type": "string" },
+        "dataCompra": { "type": "string" },
+        "observacao": { "type": "string" }
+      },
+      "required": ["id", "obraId", "categoria", "nome", "quantidade", "unidade", "valorUnitario", "valorTotal", "loja", "dataCompra"]
+    },
+    "ComparacaoPreco": {
+      "title": "ComparacaoPreco",
+      "description": "Price comparison records across different stores",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "usuarioId": { "type": "string" },
+        "material": { "type": "string" },
+        "loja": { "type": "string" },
+        "valor": { "type": "number" },
+        "data": { "type": "string" }
+      },
+      "required": ["id", "usuarioId", "material", "loja", "valor", "data"]
+    }
+  },
+  "firestore": {
+    "/usuarios/{usuarioId}": {
+      "schema": "Usuario",
+      "description": "User profiles"
+    },
+    "/obras/{obraId}": {
+      "schema": "Obra",
+      "description": "Construction projects"
+    },
+    "/entradas/{entradaId}": {
+      "schema": "Entrada",
+      "description": "Income transactions"
+    },
+    "/saidas/{saidaId}": {
+      "schema": "Saida",
+      "description": "Expense transactions"
+    },
+    "/maoObra/{maoObraId}": {
+      "schema": "MaoObra",
+      "description": "Labor payment logs"
+    },
+    "/materiais/{materialId}": {
+      "schema": "Material",
+      "description": "Material purchase details"
+    },
+    "/comparacaoPrecos/{comparacaoId}": {
+      "schema": "ComparacaoPreco",
+      "description": "Global or per-user material price data"
+    }
+  }
+}

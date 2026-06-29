@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+@theme {
+  --color-dark-bg: #0F1115;
+  --color-dark-sidebar: #16191F;
+  --color-dark-card: #1C2129;
+  --color-dark-border: #2D323D;
+  --color-brand-primary: #F27D26;
+  --color-brand-hover: #ff8c3a;
+  --color-text-main: #E4E6EB;
+  --color-text-muted: #9BA1B1;
+}
+
+body {
+  background-color: #0F1115;
+  color: #E4E6EB;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow: hidden;
+  height: 100%;
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #16191F;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2D323D;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #F27D26;
+}

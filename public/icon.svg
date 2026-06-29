@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- Background -->
+  <rect width="512" height="512" rx="112" fill="#16191F"/>
+  <rect width="472" height="472" x="20" y="20" rx="96" fill="none" stroke="#2D323D" stroke-width="8"/>
+  
+  <!-- Stylized Crane & House under construction -->
+  <g transform="translate(60, 60)">
+    <!-- House outline -->
+    <path d="M 120 280 L 120 180 L 196 110 L 272 180 L 272 280 Z" fill="none" stroke="#E4E6EB" stroke-width="16" stroke-linejoin="round"/>
+    <!-- Roof support lines -->
+    <path d="M 80 180 L 196 75 L 312 180" fill="none" stroke="#F27D26" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- Dollar sign integrated in house center -->
+    <g transform="translate(196, 200) scale(1.1)">
+      <!-- Circle for coin background -->
+      <circle cx="0" cy="0" r="36" fill="#1C2129" stroke="#F27D26" stroke-width="8"/>
+      <!-- Dollar glyph -->
+      <path d="M -8 -15 C -8 -15 8 -18 8 -8 C 8 2 -12 -2 -12 8 C -12 18 8 15 8 15 M 0 -22 L 0 22" fill="none" stroke="#F27D26" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- Construction Grid Lines -->
+    <circle cx="196" cy="196" r="140" fill="none" stroke="#2D323D" stroke-width="4" stroke-dasharray="10,10"/>
+    <line x1="196" y1="30" x2="196" y2="360" stroke="#2D323D" stroke-width="4" stroke-dasharray="5,5"/>
+    <line x1="30" y1="196" x2="360" y2="196" stroke="#2D323D" stroke-width="4" stroke-dasharray="5,5"/>
+  </g>
+</svg>

@@ -18,7 +18,10 @@ import {
   MapPin, 
   ChevronRight, 
   HardHat,
-  Loader2
+  Loader2,
+  Download,
+  Smartphone,
+  Laptop
 } from 'lucide-react';
 
 // Components
@@ -40,6 +43,47 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(false);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+
+  // PWA Install Prompt State
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBtn, setShowInstallBtn] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [isPWAAlreadyInstalled, setIsPWAAlreadyInstalled] = useState(false);
+
+  // Detect platform and PWA status
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBtn(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // Detect if already installed
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+    setIsPWAAlreadyInstalled(!!isStandalone);
+
+    // Detect iOS
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    setIsIOS(/iphone|ipad|ipod/.test(userAgent));
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`PWA install response: ${outcome}`);
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+      setShowInstallBtn(false);
+      setIsPWAAlreadyInstalled(true);
+    }
+  };
 
   // Listen to Auth State
   useEffect(() => {
@@ -292,6 +336,39 @@ export default function App() {
               </span>
             </button>
           </nav>
+
+          {/* PWA Install Widget */}
+          {!isPWAAlreadyInstalled && (
+            <div className="mx-4 my-2 p-3.5 bg-[#1C2129] border border-[#2D323D] rounded-xl space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-[#F27D26]/10 text-[#F27D26] rounded-lg">
+                  <Smartphone className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-[11px] font-bold text-[#E4E6EB]">Instalar Aplicativo</h4>
+                  <p className="text-[9px] text-[#9BA1B1]">Acesse offline e direto na tela inicial</p>
+                </div>
+              </div>
+              
+              {isIOS ? (
+                <div className="text-[9px] text-[#9BA1B1]/80 leading-relaxed bg-[#0F1115] p-2 rounded-lg border border-[#2D323D]/50">
+                  No Safari do iPhone, toque no botão de <strong className="text-[#E4E6EB]">Compartilhar</strong> e selecione <strong className="text-[#F27D26]">Adicionar à Tela de Início</strong>.
+                </div>
+              ) : showInstallBtn ? (
+                <button
+                  onClick={handleInstallClick}
+                  className="w-full py-1.5 bg-[#F27D26] hover:bg-[#ff8c3a] text-white rounded-lg text-[10px] font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Instalar ObraControl
+                </button>
+              ) : (
+                <div className="text-[9px] text-[#9BA1B1]/80 leading-relaxed bg-[#0F1115] p-2 rounded-lg border border-[#2D323D]/50">
+                  Abra no menu do seu navegador (Chrome/Edge) e clique em <strong className="text-[#F27D26]">Instalar Aplicativo</strong> para usar em tela cheia.
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Profile Card / Footer info */}

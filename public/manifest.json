@@ -1,0 +1,30 @@
+{
+  "name": "ObraControl",
+  "short_name": "ObraControl",
+  "description": "Aplicativo para controle financeiro de obras, registrando entradas, saídas, mão de obra, materiais e comparação de preços.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#16191F",
+  "theme_color": "#F27D26",
+  "orientation": "any",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-512.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}

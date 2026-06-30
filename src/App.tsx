@@ -576,6 +576,7 @@ export default function App() {
                 {/* 6. Comparador Tab */}
                 {activeTab === 'comparador' && (
                   <ComparacaoView
+                    obra={activeObra || undefined}
                     comparacoes={comparacoes}
                     onAddComparacao={addComparacao}
                     onDeleteComparacao={deleteComparacao}

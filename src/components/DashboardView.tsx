@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -7,7 +7,10 @@ import {
   Briefcase, 
   Receipt, 
   Calendar,
-  AlertTriangle
+  AlertTriangle,
+  LayoutDashboard,
+  Plus,
+  X
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -24,6 +27,7 @@ import {
   Line 
 } from 'recharts';
 import { Obra, Entrada, Saida, MaoObra, Material } from '../types';
+import { useNotification } from '../context/NotificationContext';
 
 interface DashboardViewProps {
   obra: Obra;
@@ -31,6 +35,7 @@ interface DashboardViewProps {
   saidas: Saida[];
   maoObra: MaoObra[];
   materiais: Material[];
+  onAddEntrada: (data: any) => Promise<any>;
 }
 
 const COLORS = ['#8b5cf6', '#3b82f6', '#06b6d4', '#f59e0b', '#ef4444', '#10b981', '#ec4899'];
@@ -40,8 +45,57 @@ export default function DashboardView({
   entradas, 
   saidas, 
   maoObra, 
-  materiais 
+  materiais,
+  onAddEntrada
 }: DashboardViewProps) {
+  const { showToast } = useNotification();
+  
+  // Quick Add Entrada Form States
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [valor, setValor] = useState('');
+  const [data, setData] = useState(new Date().toISOString().split('T')[0]);
+  const [origem, setOrigem] = useState('');
+  const [descricao, setDescricao] = useState('');
+  const [observacao, setObservacao] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const resetForm = () => {
+    setValor('');
+    setData(new Date().toISOString().split('T')[0]);
+    setOrigem('');
+    setDescricao('');
+    setObservacao('');
+    setError(null);
+    setShowAddForm(false);
+  };
+
+  const handleAddEntradaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!valor || isNaN(Number(valor)) || Number(valor) <= 0 || !descricao || !data) {
+      setError('Por favor, preencha todos os campos obrigatórios.');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      await onAddEntrada({
+        obraId: obra.id,
+        valor: Number(valor),
+        data,
+        origem: origem || 'Aporte do Proprietário',
+        descricao,
+        observacao
+      });
+      showToast('Entrada de dinheiro registrada com sucesso!', 'success');
+      resetForm();
+    } catch (err: any) {
+      setError(err.message || 'Erro ao registrar entrada de dinheiro.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // 1. Calculations
   const totalEntradas = useMemo(() => entradas.reduce((sum, e) => sum + e.valor, 0), [entradas]);
@@ -148,6 +202,154 @@ export default function DashboardView({
 
   return (
     <div className="space-y-8">
+      {/* 0. Header with Quick Actions */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-2">
+            <LayoutDashboard className="w-5 h-5 text-[#F27D26]" />
+            Painel Geral da Obra
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Acompanhe o balanço geral, andamento financeiro e registre novas entradas de capital.
+          </p>
+        </div>
+        <div>
+          <button
+            onClick={() => setShowAddForm(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            Adicionar Entrada de Dinheiro
+          </button>
+        </div>
+      </div>
+
+      {/* Quick Add Entrada Modal / Panel */}
+      {showAddForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl max-w-lg w-full overflow-hidden animate-zoomIn">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-700/60 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg text-emerald-600 dark:text-emerald-400">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+                    Registrar Entrada de Dinheiro
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Este aporte será somado ao saldo de caixa da obra.</p>
+                </div>
+              </div>
+              <button
+                onClick={resetForm}
+                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddEntradaSubmit} className="p-6 space-y-4">
+              {error && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-xs">
+                  {error}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1.5 uppercase tracking-wider">
+                    Valor (R$) *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-mono text-xs">R$</span>
+                    <input
+                      type="number"
+                      required
+                      step="0.01"
+                      min="0.01"
+                      value={valor}
+                      onChange={(e) => setValor(e.target.value)}
+                      placeholder="0,00"
+                      className="w-full pl-8 pr-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1.5 uppercase tracking-wider">
+                    Data do Aporte *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={data}
+                    onChange={(e) => setData(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1.5 uppercase tracking-wider">
+                  Descrição / Finalidade *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={descricao}
+                  onChange={(e) => setDescricao(e.target.value)}
+                  placeholder="Ex: Aporte financeiro inicial, Reforço de caixa"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1.5 uppercase tracking-wider">
+                  Origem do Recurso
+                </label>
+                <input
+                  type="text"
+                  value={origem}
+                  onChange={(e) => setOrigem(e.target.value)}
+                  placeholder="Ex: Recursos Próprios, Financiamento CAIXA (Aporte do Proprietário)"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1.5 uppercase tracking-wider">
+                  Observações (Opcional)
+                </label>
+                <textarea
+                  value={observacao}
+                  onChange={(e) => setObservacao(e.target.value)}
+                  placeholder="Outras informações sobre este lançamento..."
+                  rows={2}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-700/60">
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-600/50 text-white rounded-xl text-xs font-bold shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  {loading ? 'Salvando...' : 'Salvar Entrada'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* 1. Budget Alerts */}
       {saldoAtual < (obra.saldoInicial * 0.1) && (
         <div className="p-4 bg-amber-50 dark:bg-amber-950/20 border-l-4 border-amber-500 rounded-lg text-amber-800 dark:text-amber-200 text-sm flex items-start gap-3 shadow-sm animate-pulse">

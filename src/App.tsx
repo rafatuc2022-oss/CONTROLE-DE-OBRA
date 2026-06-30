@@ -474,6 +474,7 @@ export default function App() {
                       saidas={saidas}
                       maoObra={maoObra}
                       materiais={materiais}
+                      onAddEntrada={addEntrada}
                     />
                   ) : (
                     <div className="h-96 flex flex-col items-center justify-center text-center bg-[#1C2129] p-8 rounded-2xl border border-[#2D323D]">

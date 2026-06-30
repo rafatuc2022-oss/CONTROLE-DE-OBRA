@@ -8,18 +8,16 @@ import {
   Calendar, 
   Coins, 
   Phone, 
-  FileText,
   Edit2,
-  ChevronDown,
-  ChevronUp,
   DollarSign,
-  Eye,
-  Info,
   CheckCircle2,
-  X
+  X,
+  AlertTriangle,
+  History
 } from 'lucide-react';
 import { Obra, MaoObra, PagamentoMaoObra } from '../types';
 import { useNotification } from '../context/NotificationContext';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface MaoObraViewProps {
   obra: Obra;
@@ -42,42 +40,34 @@ export default function MaoObraView({
   onDeleteMaoObraVale,
   onUpdateMaoObraVale
 }: MaoObraViewProps) {
-  const { confirmAction } = useNotification();
+  const { confirmAction, showToast } = useNotification();
+  
+  // Local state for UI
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingMaoObra, setEditingMaoObra] = useState<MaoObra | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [expandedProfIds, setExpandedProfIds] = useState<Record<string, boolean>>({});
+  const [selectedPedreiroId, setSelectedPedreiroId] = useState<string | null>(null);
 
-  // Professional Form Fields
+  // Pedreiro Registration Form Fields (SIMPLIFIED)
   const [nome, setNome] = useState('');
-  const [funcao, setFuncao] = useState('');
-  const [valorContrato, setValorContrato] = useState('');
-  const [dataPagamento, setDataPagamento] = useState(new Date().toISOString().split('T')[0]);
-  const [formaPagamento, setFormaPagamento] = useState('Pix');
-  const [cpf, setCpf] = useState('');
   const [telefone, setTelefone] = useState('');
-  const [observacao, setObservacao] = useState('');
+  const [valorContrato, setValorContrato] = useState('');
 
-  // Vale / Retirada Form Modal State
-  const [showValeModalFor, setShowValeModalFor] = useState<MaoObra | null>(null);
-  const [editingVale, setEditingVale] = useState<{ professional: MaoObra; vale: PagamentoMaoObra } | null>(null);
+  // Vale Form Fields
   const [valeValor, setValeValor] = useState('');
   const [valeData, setValeData] = useState(new Date().toISOString().split('T')[0]);
-  const [valeFormaPagamento, setValeFormaPagamento] = useState('Pix');
-  const [valeObservacao, setValeObservacao] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [valeLoading, setValeLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [valeError, setValeError] = useState<string | null>(null);
 
-  // Sanitizes a professional's record to cleanly handle legacy items
+  // Sanitizes professional records to cleanly handle legacy/missing values
   const sanitizedMaoObra = useMemo(() => {
     return maoObra.map(item => {
       const pagamentos = item.pagamentos || [];
       const vContrato = item.valorContrato || item.valor || 0;
       
-      // If there's no pagamentos array but there was a legacy valor, we map it as a legacy payment
       let finalPagamentos = [...pagamentos];
       if (pagamentos.length === 0 && item.valor > 0) {
         finalPagamentos = [
@@ -98,232 +88,32 @@ export default function MaoObraView({
     });
   }, [maoObra]);
 
-  const toggleExpand = (id: string) => {
-    setExpandedProfIds(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
-  };
-
-  const resetForm = () => {
-    setNome('');
-    setFuncao('');
-    setValorContrato('');
-    setDataPagamento(new Date().toISOString().split('T')[0]);
-    setFormaPagamento('Pix');
-    setCpf('');
-    setTelefone('');
-    setObservacao('');
-    setError(null);
-    setShowAddForm(false);
-    setEditingMaoObra(null);
-  };
-
-  const handleEditClick = (item: MaoObra) => {
-    setEditingMaoObra(item);
-    setNome(item.nome);
-    setFuncao(item.funcao);
-    setValorContrato((item.valorContrato || item.valor || 0).toString());
-    setDataPagamento(item.dataPagamento);
-    setFormaPagamento(item.formaPagamento);
-    setCpf(item.cpf || '');
-    setTelefone(item.telefone || '');
-    setObservacao(item.observacao || '');
-    setShowAddForm(true);
-
-    const formElement = document.getElementById('form-mao-obra');
-    if (formElement) {
-      formElement.scrollIntoView({ behavior: 'smooth' });
+  // Set initial selected pedreiro once loaded if none is selected
+  const activeSelectedId = useMemo(() => {
+    if (selectedPedreiroId && sanitizedMaoObra.some(p => p.id === selectedPedreiroId)) {
+      return selectedPedreiroId;
     }
-  };
+    return sanitizedMaoObra.length > 0 ? sanitizedMaoObra[0].id : null;
+  }, [selectedPedreiroId, sanitizedMaoObra]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nome || !valorContrato) {
-      setError('Por favor, preencha todos os campos obrigatórios (*).');
-      return;
-    }
+  const selectedPedreiro = useMemo(() => {
+    return sanitizedMaoObra.find(p => p.id === activeSelectedId) || null;
+  }, [activeSelectedId, sanitizedMaoObra]);
 
-    setLoading(true);
-    setError(null);
-    try {
-      const parsedValContrato = Number(valorContrato);
-      if (isNaN(parsedValContrato) || parsedValContrato <= 0) {
-        throw new Error('O valor do orçamento/contrato deve ser um número maior que zero.');
-      }
-
-      const defaultFuncao = funcao || 'Mão de obra';
-      const defaultDataPagamento = dataPagamento || new Date().toISOString().split('T')[0];
-      const defaultFormaPagamento = formaPagamento || 'Pix';
-
-      if (editingMaoObra) {
-        await onUpdateMaoObra(editingMaoObra.id, {
-          nome,
-          funcao: defaultFuncao,
-          valorContrato: parsedValContrato,
-          dataPagamento: defaultDataPagamento,
-          formaPagamento: defaultFormaPagamento,
-          cpf: cpf || '',
-          telefone: telefone || '',
-          observacao: observacao || ''
-        }, editingMaoObra);
-      } else {
-        await onAddMaoObra({
-          obraId: obra.id,
-          nome,
-          funcao: defaultFuncao,
-          valor: 0, // initially R$ 0,00 paid
-          valorContrato: parsedValContrato,
-          dataPagamento: defaultDataPagamento,
-          formaPagamento: defaultFormaPagamento,
-          cpf: cpf || '',
-          telefone: telefone || '',
-          observacao: observacao || '',
-          pagamentos: []
-        });
-      }
-      resetForm();
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Erro ao registrar o profissional. Verifique os campos e tente novamente.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Vale Submission (Add / Edit)
-  const openValeModal = (professional: MaoObra, valeToEdit?: PagamentoMaoObra) => {
-    if (valeToEdit) {
-      setEditingVale({ professional, vale: valeToEdit });
-      setValeValor(valeToEdit.valor.toString());
-      setValeData(valeToEdit.data);
-      setValeFormaPagamento(valeToEdit.formaPagamento);
-      setValeObservacao(valeToEdit.observacao || '');
-    } else {
-      setShowValeModalFor(professional);
-      setValeValor('');
-      setValeData(new Date().toISOString().split('T')[0]);
-      setValeFormaPagamento(professional.formaPagamento || 'Pix');
-      setValeObservacao('');
-    }
-    setValeError(null);
-  };
-
-  const closeValeModal = () => {
-    setShowValeModalFor(null);
-    setEditingVale(null);
-    setValeValor('');
-    setValeData(new Date().toISOString().split('T')[0]);
-    setValeFormaPagamento('Pix');
-    setValeObservacao('');
-    setValeError(null);
-  };
-
-  const handleValeSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!valeValor || !valeData || !valeFormaPagamento) {
-      setValeError('Por favor, preencha todos os campos obrigatórios (*).');
-      return;
-    }
-
-    setValeLoading(true);
-    setValeError(null);
-    try {
-      const parsedVal = Number(valeValor);
-      if (isNaN(parsedVal) || parsedVal <= 0) {
-        throw new Error('O valor do vale deve ser maior que zero.');
-      }
-
-      if (editingVale) {
-        if (editingVale.vale.id === 'legacy-payment') {
-          // If editing a legacy payment, we need to convert it to a real payment.
-          // Since legacy was stored in the base 'valor' field, the easiest way is to update
-          // the contract's pagamentos array by adding this edited one, and setting the model.
-          await onUpdateMaoObra(editingVale.professional.id, {
-            valor: parsedVal,
-            dataPagamento: valeData,
-            formaPagamento: valeFormaPagamento,
-            observacao: valeObservacao,
-            pagamentos: [{
-              id: 'vale_' + Math.random().toString(36).substr(2, 9),
-              valor: parsedVal,
-              data: valeData,
-              formaPagamento: valeFormaPagamento,
-              observacao: valeObservacao
-            }]
-          }, editingVale.professional);
-        } else {
-          await onUpdateMaoObraVale(editingVale.professional.id, editingVale.vale.id, {
-            valor: parsedVal,
-            data: valeData,
-            formaPagamento: valeFormaPagamento,
-            observacao: valeObservacao
-          });
-        }
-      } else if (showValeModalFor) {
-        await onAddMaoObraVale(showValeModalFor.id, {
-          valor: parsedVal,
-          data: valeData,
-          formaPagamento: valeFormaPagamento,
-          observacao: valeObservacao
-        });
-        // Auto-expand this professional to see the new voucher
-        setExpandedProfIds(prev => ({ ...prev, [showValeModalFor.id]: true }));
-      }
-      closeValeModal();
-    } catch (err: any) {
-      console.error(err);
-      setValeError(err.message || 'Erro ao registrar o vale. Tente novamente.');
-    } finally {
-      setValeLoading(false);
-    }
-  };
-
-  const handleDeleteVale = async (professional: MaoObra, paymentId: string) => {
-    const confirmed = await confirmAction({
-      title: 'Excluir Vale/Retirada',
-      message: 'Tem certeza que deseja excluir este vale de adiantamento? O saldo da obra e o histórico do profissional serão recalculados automaticamente.',
-      confirmText: 'Excluir Vale',
-      cancelText: 'Cancelar',
-      variant: 'danger'
-    });
-    if (!confirmed) {
-      return;
-    }
-    
-    try {
-      if (paymentId === 'legacy-payment') {
-        // Clear out the payment completely for legacy
-        await onUpdateMaoObra(professional.id, {
-          valor: 0,
-          pagamentos: []
-        }, professional);
-      } else {
-        await onDeleteMaoObraVale(professional.id, paymentId);
-      }
-    } catch (err) {
-      console.error('Erro ao excluir o vale:', err);
-      alert('Erro ao excluir o vale.');
-    }
-  };
-
-  // Filter and search labor list
   const filteredMaoObra = useMemo(() => {
     return sanitizedMaoObra.filter(item => {
       if (searchTerm) {
         const query = searchTerm.toLowerCase();
         return (
           item.nome.toLowerCase().includes(query) ||
-          item.funcao.toLowerCase().includes(query) ||
-          item.observacao?.toLowerCase().includes(query) ||
-          item.cpf?.includes(query)
+          item.telefone?.includes(query)
         );
       }
       return true;
     });
   }, [sanitizedMaoObra, searchTerm]);
 
-  // Financial calculations
+  // General Financial Totals
   const totalOrcado = useMemo(() => {
     return sanitizedMaoObra.reduce((sum, item) => sum + item.valorContrato, 0);
   }, [sanitizedMaoObra]);
@@ -344,17 +134,180 @@ export default function MaoObraView({
     return Math.min(100, Math.round((totalPago / totalOrcado) * 100));
   }, [totalOrcado, totalPago]);
 
+  // Reset registration form
+  const resetForm = () => {
+    setNome('');
+    setTelefone('');
+    setValorContrato('');
+    setError(null);
+    setShowAddForm(false);
+    setEditingMaoObra(null);
+  };
+
+  const handleEditClick = (item: MaoObra) => {
+    setEditingMaoObra(item);
+    setNome(item.nome);
+    setTelefone(item.telefone || '');
+    setValorContrato(item.valorContrato.toString());
+    setShowAddForm(true);
+
+    const formElement = document.getElementById('form-cadastro-pedreiro');
+    if (formElement) {
+      formElement.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  // Submit Pedreiro Registration
+  const handlePedreiroSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nome || !valorContrato) {
+      setError('Por favor, preencha o nome e o valor contratado.');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const parsedValContrato = Number(valorContrato);
+      if (isNaN(parsedValContrato) || parsedValContrato <= 0) {
+        throw new Error('O valor contratado deve ser um número maior que zero.');
+      }
+
+      if (editingMaoObra) {
+        await onUpdateMaoObra(editingMaoObra.id, {
+          nome,
+          telefone: telefone || '',
+          valorContrato: parsedValContrato,
+        }, editingMaoObra);
+      } else {
+        const result = await onAddMaoObra({
+          obraId: obra.id,
+          nome,
+          funcao: 'Pedreiro',
+          valor: 0,
+          valorContrato: parsedValContrato,
+          dataPagamento: new Date().toISOString().split('T')[0],
+          formaPagamento: 'Pix',
+          cpf: '',
+          telefone: telefone || '',
+          observacao: '',
+          pagamentos: []
+        });
+        if (result && result.id) {
+          setSelectedPedreiroId(result.id);
+        }
+      }
+      resetForm();
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Erro ao registrar o pedreiro. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Submit Vale/Adiantamento
+  const handleValeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetPedreiroId = activeSelectedId;
+
+    if (!targetPedreiroId) {
+      setValeError('Selecione um pedreiro para registrar o vale.');
+      return;
+    }
+    if (!valeValor || !valeData) {
+      setValeError('Preencha o valor do vale e a data de pagamento.');
+      return;
+    }
+
+    setValeLoading(true);
+    setValeError(null);
+    try {
+      const parsedVal = Number(valeValor);
+      if (isNaN(parsedVal) || parsedVal <= 0) {
+        throw new Error('O valor do vale deve ser maior que zero.');
+      }
+
+      await onAddMaoObraVale(targetPedreiroId, {
+        valor: parsedVal,
+        data: valeData,
+        formaPagamento: 'Pix',
+        observacao: 'Pagamento de Vale'
+      });
+
+      // Reset vale fields
+      setValeValor('');
+      setValeData(new Date().toISOString().split('T')[0]);
+      showToast('Vale registrado e saldo atualizado com sucesso!', 'success');
+    } catch (err: any) {
+      console.error(err);
+      setValeError(err.message || 'Erro ao registrar o vale. Tente novamente.');
+    } finally {
+      setValeLoading(false);
+    }
+  };
+
+  // Delete Vale
+  const handleDeleteVale = async (pedreiroId: string, paymentId: string) => {
+    const confirmed = await confirmAction({
+      title: 'Excluir Vale',
+      message: 'Tem certeza de que deseja excluir este vale? O saldo restante do pedreiro e o balanço da obra serão recalculados.',
+      confirmText: 'Excluir Vale',
+      cancelText: 'Cancelar',
+      variant: 'danger'
+    });
+    if (!confirmed) return;
+
+    try {
+      if (paymentId === 'legacy-payment') {
+        const ped = sanitizedMaoObra.find(p => p.id === pedreiroId);
+        if (ped) {
+          await onUpdateMaoObra(pedreiroId, {
+            valor: 0,
+            pagamentos: []
+          }, ped);
+        }
+      } else {
+        await onDeleteMaoObraVale(pedreiroId, paymentId);
+      }
+      showToast('Vale excluído com sucesso!', 'success');
+    } catch (err: any) {
+      console.error('Erro ao excluir vale:', err);
+    }
+  };
+
+  // Delete Pedreiro
+  const handleDeletePedreiro = async (pedreiro: MaoObra) => {
+    const confirmed = await confirmAction({
+      title: 'Excluir Pedreiro',
+      message: `Tem certeza que deseja excluir o cadastro de "${pedreiro.nome}"? Todos os vales correspondentes serão excluídos permanentemente.`,
+      confirmText: 'Excluir Pedreiro',
+      cancelText: 'Cancelar',
+      variant: 'danger'
+    });
+    if (!confirmed) return;
+
+    try {
+      await onDeleteMaoObra(pedreiro);
+      if (activeSelectedId === pedreiro.id) {
+        setSelectedPedreiroId(null);
+      }
+    } catch (err: any) {
+      console.error('Erro ao excluir pedreiro:', err);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Header View */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-xl font-bold text-[#E4E6EB] font-sans tracking-tight flex items-center gap-2">
             <Briefcase className="w-5 h-5 text-[#F27D26]" />
-            Mão de Obra e Orçamentos
+            Mão de Obra (Pedreiros)
           </h2>
           <p className="text-xs text-[#9BA1B1] mt-1">
-            Gerencie contratos, orçamentos totais cobrados e registre adiantamentos (vales) de pedreiros e equipes.
+            Controle os contratos de prestação de serviço, registre adiantamentos através de vales e acompanhe o saldo a pagar em tempo real.
           </p>
         </div>
 
@@ -364,7 +317,7 @@ export default function MaoObraView({
             className="flex items-center gap-2 px-4 py-2.5 bg-[#F27D26] hover:bg-[#ff8c3a] text-white rounded-lg text-xs font-semibold shadow-sm transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            Contratar Profissional
+            Adicionar Pedreiro
           </button>
         )}
       </div>
@@ -376,7 +329,7 @@ export default function MaoObraView({
             <Coins className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[10px] text-[#9BA1B1] uppercase font-semibold">Orçamentos Totais</p>
+            <p className="text-[10px] text-[#9BA1B1] uppercase font-semibold">Total de Contratos</p>
             <h3 className="text-base font-bold text-[#E4E6EB] mt-0.5">
               R$ {totalOrcado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </h3>
@@ -389,11 +342,11 @@ export default function MaoObraView({
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[10px] text-[#9BA1B1] uppercase font-semibold">Total Pago (Vales)</p>
+            <p className="text-[10px] text-[#9BA1B1] uppercase font-semibold">Total de Vales Pagos</p>
             <h3 className="text-base font-bold text-emerald-400 mt-0.5">
               R$ {totalPago.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </h3>
-            <p className="text-[9px] text-[#9BA1B1]">{percentualGeral}% do orçamento liquidado</p>
+            <p className="text-[9px] text-[#9BA1B1]">{percentualGeral}% quitado</p>
           </div>
         </div>
 
@@ -406,13 +359,13 @@ export default function MaoObraView({
             <h3 className="text-base font-bold text-[#F27D26] mt-0.5">
               R$ {totalDevedor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </h3>
-            <p className="text-[9px] text-[#9BA1B1]">Saldo restante da mão de obra</p>
+            <p className="text-[9px] text-[#9BA1B1]">Saldo restante de mão de obra</p>
           </div>
         </div>
 
         <div className="bg-[#1C2129] p-4 rounded-xl border border-[#2D323D] flex flex-col justify-center">
           <div className="flex justify-between text-[10px] text-[#9BA1B1] font-bold uppercase mb-1">
-            <span>Progresso da Quitação</span>
+            <span>Progresso Geral</span>
             <span>{percentualGeral}%</span>
           </div>
           <div className="w-full bg-[#0F1115] h-2 rounded-full overflow-hidden border border-[#2D323D]/50">
@@ -426,11 +379,11 @@ export default function MaoObraView({
 
       {/* Add/Edit professional form */}
       {showAddForm && (
-        <div id="form-mao-obra" className="bg-[#1C2129] p-6 rounded-2xl border border-[#2D323D] shadow-lg animate-fadeIn">
+        <div id="form-cadastro-pedreiro" className="bg-[#1C2129] p-6 rounded-2xl border border-[#2D323D] shadow-lg animate-fadeIn">
           <div className="flex justify-between items-center mb-5">
             <h3 className="text-sm font-bold text-[#E4E6EB] uppercase tracking-wider flex items-center gap-1.5">
               <User className="w-4 h-4 text-[#F27D26]" />
-              {editingMaoObra ? 'Editar Cadastro de Profissional' : 'Contratar Novo Profissional'}
+              {editingMaoObra ? 'Editar Cadastro de Pedreiro' : 'Cadastrar Novo Pedreiro'}
             </h3>
             <button
               onClick={resetForm}
@@ -446,38 +399,38 @@ export default function MaoObraView({
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handlePedreiroSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                  Nome *
+                  Nome do Pedreiro *
                 </label>
                 <input
                   type="text"
                   required
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
-                  placeholder="Ex: Pedro de Alcântara"
+                  placeholder="Ex: José da Silva"
                   className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
                 />
               </div>
 
               <div>
                 <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                  Telefone
+                  Número de Telefone
                 </label>
                 <input
                   type="text"
                   value={telefone}
                   onChange={(e) => setTelefone(e.target.value)}
-                  placeholder="Ex: (11) 98765-4321"
+                  placeholder="Ex: (11) 99999-9999"
                   className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
                 />
               </div>
 
               <div>
                 <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                  Valor do Orçamento (R$) *
+                  Valor Total Contratado (R$) *
                 </label>
                 <input
                   type="number"
@@ -485,7 +438,7 @@ export default function MaoObraView({
                   step="0.01"
                   value={valorContrato}
                   onChange={(e) => setValorContrato(e.target.value)}
-                  placeholder="Ex: 8500.00"
+                  placeholder="Ex: 5000.00"
                   className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
                 />
               </div>
@@ -504,389 +457,329 @@ export default function MaoObraView({
                 disabled={loading}
                 className="px-5 py-2.5 bg-[#F27D26] hover:bg-[#ff8c3a] disabled:bg-[#F27D26]/50 text-white rounded-lg text-xs font-bold shadow transition-colors cursor-pointer"
               >
-                {loading ? 'Salvando...' : (editingMaoObra ? 'Salvar Contrato' : 'Cadastrar Profissional')}
+                {loading ? 'Salvando...' : (editingMaoObra ? 'Salvar Alterações' : 'Salvar Cadastro')}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Search Filter */}
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-[#16191F] p-4 rounded-xl border border-[#2D323D]">
-        <div className="relative w-full md:max-w-sm">
-          <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-[#9BA1B1]" />
-          <input
-            type="text"
-            placeholder="Buscar profissional por nome, cargo ou CPF..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] placeholder-[#9BA1B1] focus:outline-none focus:border-[#F27D26]"
-          />
-        </div>
-        <p className="text-[10px] text-[#9BA1B1] italic">
-          💡 Clique em um profissional para visualizar e gerenciar seus vales e adiantamentos.
-        </p>
-      </div>
+      {/* Main Two-Column Viewport */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        {/* LEFT COLUMN: Pedreiro List (col-span-7) */}
+        <div className="lg:col-span-7 space-y-4">
+          <div className="bg-[#1C2129] rounded-2xl border border-[#2D323D] overflow-hidden p-5 space-y-4 shadow-md">
+            
+            {/* Search Box */}
+            <div className="flex items-center justify-between gap-4">
+              <div className="relative w-full">
+                <Search className="absolute left-3 top-2.5 w-4 h-4 text-[#9BA1B1]" />
+                <input
+                  type="text"
+                  placeholder="Buscar pedreiro por nome..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] placeholder-[#9BA1B1] focus:outline-none focus:border-[#F27D26]"
+                />
+              </div>
+            </div>
 
-      {/* Labor Table */}
-      <div className="bg-[#1C2129] rounded-2xl border border-[#2D323D] overflow-hidden">
-        {filteredMaoObra.length > 0 ? (
-          <div className="divide-y divide-[#2D323D]">
-            {filteredMaoObra.map((item) => {
-              const totalPagoProf = item.pagamentos.reduce((acc, p) => acc + p.valor, 0);
-              const devedorProf = Math.max(0, item.valorContrato - totalPagoProf);
-              const percentualProf = item.valorContrato === 0 ? 0 : Math.min(100, Math.round((totalPagoProf / item.valorContrato) * 100));
-              const isExpanded = !!expandedProfIds[item.id];
+            {/* Pedreiros List */}
+            <div className="space-y-3">
+              {filteredMaoObra.length > 0 ? (
+                filteredMaoObra.map((item) => {
+                  const totalPagoProf = item.pagamentos.reduce((acc, p) => acc + p.valor, 0);
+                  const devedorProf = Math.max(0, item.valorContrato - totalPagoProf);
+                  const isSelected = activeSelectedId === item.id;
+                  const isPago = devedorProf <= 0;
 
-              return (
-                <div key={item.id} className="transition-all duration-200">
-                  {/* Master row */}
-                  <div 
-                    onClick={() => toggleExpand(item.id)}
-                    className="p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:bg-[#16191F]/40 transition-colors cursor-pointer select-none"
-                  >
-                    <div className="flex items-start gap-3.5 w-full md:w-1/3">
-                      <div className="p-2.5 bg-[#F27D26]/10 text-[#F27D26] rounded-xl shrink-0 mt-0.5">
-                        <User className="w-4.5 h-4.5" />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-[#E4E6EB] text-xs flex items-center gap-2">
-                          {item.nome}
-                          <span className="px-2 py-0.5 bg-[#0F1115] text-[#9BA1B1] rounded text-[9px] font-mono border border-[#2D323D]">
-                            {item.funcao}
-                          </span>
-                        </h4>
-                        <div className="flex items-center gap-3 text-[10px] text-[#9BA1B1] mt-1">
-                          {item.cpf && <span>CPF: {item.cpf}</span>}
-                          {item.telefone && (
-                            <span className="flex items-center gap-1">
-                              <Phone className="w-3 h-3" />
-                              {item.telefone}
+                  return (
+                    <div 
+                      key={item.id}
+                      onClick={() => setSelectedPedreiroId(item.id)}
+                      className={`p-4 rounded-xl border transition-all duration-200 cursor-pointer select-none ${
+                        isSelected 
+                          ? 'bg-[#1D2433] border-[#F27D26] shadow-md shadow-[#F27D26]/5 ring-1 ring-[#F27D26]' 
+                          : 'bg-[#13171F] border-[#2D323D] hover:bg-[#161B26]'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start gap-4">
+                        <div className="flex items-start gap-3">
+                          <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${
+                            isPago ? 'bg-emerald-500/10 text-emerald-400' : 'bg-[#F27D26]/10 text-[#F27D26]'
+                          }`}>
+                            <User className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-[#E4E6EB] text-xs flex items-center gap-2">
+                              {item.nome}
+                            </h4>
+                            {item.telefone && (
+                              <p className="flex items-center gap-1 text-[10px] text-[#9BA1B1] mt-1">
+                                <Phone className="w-3 h-3 text-[#9BA1B1]" />
+                                {item.telefone}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        <div>
+                          {isPago ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[9px] font-bold uppercase tracking-wider animate-pulse">
+                              ● Pago
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-[9px] font-bold uppercase tracking-wider">
+                              ● Em aberto
                             </span>
                           )}
                         </div>
                       </div>
-                    </div>
 
-                    {/* Financial stats of this professional */}
-                    <div className="grid grid-cols-3 gap-6 w-full md:w-1/2 text-left md:text-right md:justify-end">
-                      <div>
-                        <span className="text-[9px] text-[#9BA1B1] uppercase font-semibold block">Orçamento</span>
-                        <span className="font-bold text-xs text-[#E4E6EB] font-mono block mt-0.5">
-                          R$ {item.valorContrato.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[9px] text-[#9BA1B1] uppercase font-semibold block">Total Pago</span>
-                        <span className="font-bold text-xs text-emerald-400 font-mono block mt-0.5">
-                          R$ {totalPagoProf.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[9px] text-[#9BA1B1] uppercase font-semibold block">Restante</span>
-                        <span className="font-bold text-xs text-[#F27D26] font-mono block mt-0.5">
-                          R$ {devedorProf.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Visual bar and toggle */}
-                    <div className="flex items-center justify-between md:justify-end gap-4 w-full md:w-auto pt-2.5 md:pt-0 border-t border-[#2D323D]/50 md:border-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-[#E4E6EB] font-mono">{percentualProf}%</span>
-                        <div className="w-16 bg-[#0F1115] h-1.5 rounded-full overflow-hidden border border-[#2D323D]">
-                          <div className="bg-emerald-500 h-full" style={{ width: `${percentualProf}%` }} />
+                      {/* Mini Financial Display inside card */}
+                      <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-[#2D323D]/50 text-left text-[11px]">
+                        <div>
+                          <span className="text-[9px] text-[#9BA1B1] uppercase block">Contratado</span>
+                          <span className="font-semibold text-[#E4E6EB] font-mono">
+                            R$ {item.valorContrato.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-[#9BA1B1] uppercase block">Pago</span>
+                          <span className="font-semibold text-emerald-400 font-mono">
+                            R$ {totalPagoProf.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-[#9BA1B1] uppercase block">Saldo Restante</span>
+                          <span className="font-semibold text-[#F27D26] font-mono">
+                            R$ {devedorProf.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openValeModal(item);
-                          }}
-                          className="flex items-center gap-1 px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
-                          title="Lançar vale / adiantamento"
-                        >
-                          <Plus className="w-3 h-3" />
-                          Vale
-                        </button>
-
+                      {/* Action buttons footer */}
+                      <div className="flex justify-end gap-2 mt-3 pt-2.5 border-t border-[#2D323D]/30">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             handleEditClick(item);
                           }}
-                          className="p-1.5 text-[#9BA1B1] hover:text-[#F27D26] hover:bg-[#F27D26]/10 rounded-lg transition-all cursor-pointer"
-                          title="Editar contrato"
+                          className="flex items-center gap-1 px-2 py-1 text-[#9BA1B1] hover:text-[#F27D26] hover:bg-[#F27D26]/10 rounded-md text-[10px] font-medium transition-all cursor-pointer"
                         >
-                          <Edit2 className="w-3.5 h-3.5" />
+                          <Edit2 className="w-3 h-3" />
+                          Editar
                         </button>
-
                         <button
-                          onClick={async (e) => {
+                          onClick={(e) => {
                             e.stopPropagation();
-                            const confirmed = await confirmAction({
-                              title: 'Excluir Profissional',
-                              message: `Tem certeza que deseja excluir o cadastro do profissional "${item.nome}"? Todos os vales, adiantamentos e lançamentos financeiros correspondentes serão excluídos permanentemente.`,
-                              confirmText: 'Excluir Profissional',
-                              cancelText: 'Cancelar',
-                              variant: 'danger'
-                            });
-                            if (confirmed) {
-                              onDeleteMaoObra(item);
-                            }
+                            handleDeletePedreiro(item);
                           }}
-                          className="p-1.5 text-[#9BA1B1] hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all cursor-pointer"
-                          title="Excluir profissional"
+                          className="flex items-center gap-1 px-2 py-1 text-[#9BA1B1] hover:text-rose-500 hover:bg-rose-500/10 rounded-md text-[10px] font-medium transition-all cursor-pointer"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-3 h-3" />
+                          Excluir
                         </button>
-
-                        <div className="p-1 text-[#9BA1B1]">
-                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                        </div>
                       </div>
                     </div>
+                  );
+                })
+              ) : (
+                <div className="text-center py-12 bg-[#13171F] rounded-xl border border-dashed border-[#2D323D]/50 text-[#9BA1B1] text-xs">
+                  <Briefcase className="w-8 h-8 text-[#2D323D] mx-auto mb-2" />
+                  Nenhum pedreiro cadastrado.
+                  <button
+                    onClick={() => setShowAddForm(true)}
+                    className="text-[#F27D26] hover:underline font-bold block mx-auto mt-1"
+                  >
+                    Clique aqui para adicionar
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN: Pagamento de Vale Section (col-span-5) */}
+        <div className="lg:col-span-5 space-y-4">
+          <div className="bg-[#1C2129] rounded-2xl border border-[#2D323D] p-5 space-y-5 shadow-md">
+            
+            <div className="border-b border-[#2D323D]/50 pb-3 flex items-center gap-2">
+              <Coins className="w-4.5 h-4.5 text-emerald-400" />
+              <h3 className="text-xs font-bold text-[#E4E6EB] uppercase tracking-wider">
+                Pagamento de Vale
+              </h3>
+            </div>
+
+            {/* Select/Dropdown to specify pedreiro */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
+                  Nome do Pedreiro
+                </label>
+                <select
+                  value={activeSelectedId || ''}
+                  onChange={(e) => setSelectedPedreiroId(e.target.value || null)}
+                  className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26] cursor-pointer"
+                >
+                  <option value="">-- Selecione o Pedreiro --</option>
+                  {sanitizedMaoObra.map(p => (
+                    <option key={p.id} value={p.id}>{p.nome}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-[#9BA1B1]/60 mt-1">
+                  Selecione da lista ao lado ou escolha acima.
+                </p>
+              </div>
+
+              {/* Form to submit vale if a pedreiro is selected */}
+              <form onSubmit={handleValeSubmit} className="space-y-4">
+                {valeError && (
+                  <div className="p-2.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-xs animate-fadeIn">
+                    {valeError}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
+                      Data do Pagamento *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={valeData}
+                      onChange={(e) => setValeData(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
+                    />
                   </div>
 
-                  {/* Expanded Payments / Vales detail panel */}
-                  {isExpanded && (
-                    <div className="bg-[#13171F] px-6 py-5 border-t border-[#2D323D]/40 space-y-4 animate-fadeIn">
-                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pb-3 border-b border-[#2D323D]/30">
-                        <div>
-                          <h5 className="text-[11px] font-bold text-[#E4E6EB] uppercase tracking-wider flex items-center gap-1.5">
-                            <Coins className="w-3.5 h-3.5 text-emerald-400" />
-                            Histórico de Vales e Adiantamentos
-                          </h5>
-                          <p className="text-[10px] text-[#9BA1B1] mt-0.5">
-                            Abaixo estão todos os adiantamentos já pagos e vales concedidos para {item.nome}.
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => openValeModal(item)}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-[#0F1115] rounded-lg text-[10px] font-bold transition-all cursor-pointer shadow-sm"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          Registrar Vale / Adiantamento
-                        </button>
-                      </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
+                      Valor do Vale (R$) *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-xs text-[#9BA1B1] font-bold font-mono">R$</span>
+                      <input
+                        type="number"
+                        required
+                        step="0.01"
+                        value={valeValor}
+                        onChange={(e) => setValeValor(e.target.value)}
+                        placeholder="Ex: 250.00"
+                        className="w-full pl-8 pr-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs font-mono text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
+                      />
+                    </div>
+                  </div>
+                </div>
 
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                        {/* Contract summary and details on left */}
-                        <div className="space-y-3 bg-[#0F1115]/50 p-4 rounded-xl border border-[#2D323D]/50 text-xs">
-                          <h6 className="font-bold text-[#E4E6EB] uppercase text-[10px] tracking-wider text-[#F27D26]">Detalhes do Contrato</h6>
-                          <div className="space-y-2 mt-2">
-                            <div className="flex justify-between">
-                              <span className="text-[#9BA1B1]">Data de Início:</span>
-                              <span className="text-[#E4E6EB] font-medium">{new Date(item.dataPagamento).toLocaleDateString('pt-BR')}</span>
+                <button
+                  type="submit"
+                  disabled={valeLoading || !activeSelectedId}
+                  className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/20 disabled:text-[#9BA1B1]/50 disabled:cursor-not-allowed text-[#0F1115] rounded-lg text-xs font-bold shadow transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  {valeLoading ? 'Registrando...' : 'Registrar Vale'}
+                </button>
+              </form>
+            </div>
+
+            {/* Selected Pedreiro Financial Details Box & History */}
+            {selectedPedreiro ? (
+              <div className="pt-4 border-t border-[#2D323D]/50 space-y-4 animate-fadeIn">
+                
+                {/* Resumo Financeiro do Pedreiro Selecionado */}
+                <div className="bg-[#13171F] p-4 rounded-xl border border-[#2D323D]/60 space-y-3">
+                  <div className="flex justify-between items-center border-b border-[#2D323D]/40 pb-2">
+                    <span className="text-[10px] font-bold text-[#F27D26] uppercase">Resumo de Quitação</span>
+                    {selectedPedreiro.valorContrato - selectedPedreiro.pagamentos.reduce((acc, p) => acc + p.valor, 0) <= 0 ? (
+                      <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-[9px] font-bold rounded uppercase">
+                        Quito (Pago)
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 text-[9px] font-bold rounded uppercase">
+                        Em Aberto
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-1.5 text-xs text-[#E4E6EB]">
+                    <div className="flex justify-between">
+                      <span className="text-[#9BA1B1]">Valor total da mão de obra:</span>
+                      <span className="font-semibold font-mono text-[#E4E6EB]">
+                        R$ {selectedPedreiro.valorContrato.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    
+                    <div className="flex justify-between">
+                      <span className="text-[#9BA1B1]">Total de vales pagos:</span>
+                      <span className="font-semibold font-mono text-emerald-400">
+                        R$ {selectedPedreiro.pagamentos.reduce((acc, p) => acc + p.valor, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    
+                    <div className="flex justify-between pt-1.5 border-t border-[#2D323D]/30 text-sm font-bold">
+                      <span className="text-[#9BA1B1]">Saldo restante a pagar:</span>
+                      <span className="font-mono text-[#F27D26]">
+                        R$ {Math.max(0, selectedPedreiro.valorContrato - selectedPedreiro.pagamentos.reduce((acc, p) => acc + p.valor, 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Historico de Vales do Pedreiro Selecionado */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 text-[#9BA1B1] text-[10px] uppercase font-bold tracking-wider">
+                    <History className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Histórico de Vales ({selectedPedreiro.nome})</span>
+                  </div>
+
+                  {selectedPedreiro.pagamentos.length > 0 ? (
+                    <div className="border border-[#2D323D]/40 rounded-xl overflow-hidden max-h-56 overflow-y-auto divide-y divide-[#2D323D]/30">
+                      {selectedPedreiro.pagamentos.map((p) => (
+                        <div key={p.id} className="p-3 bg-[#13171F] flex items-center justify-between text-xs hover:bg-[#161B26] transition-colors">
+                          <div className="space-y-0.5">
+                            <span className="font-mono font-bold text-emerald-400">
+                              R$ {p.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                            <div className="flex items-center gap-1 text-[10px] text-[#9BA1B1]">
+                              <Calendar className="w-3 h-3 text-[#9BA1B1]" />
+                              <span>{new Date(p.data).toLocaleDateString('pt-BR')}</span>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-[#9BA1B1]">Forma de Pagto Padrão:</span>
-                              <span className="text-[#E4E6EB] font-medium">{item.formaPagamento}</span>
-                            </div>
-                            {item.cpf && (
-                              <div className="flex justify-between">
-                                <span className="text-[#9BA1B1]">CPF:</span>
-                                <span className="text-[#E4E6EB] font-mono">{item.cpf}</span>
-                              </div>
-                            )}
-                            {item.telefone && (
-                              <div className="flex justify-between">
-                                <span className="text-[#9BA1B1]">Telefone:</span>
-                                <span className="text-[#E4E6EB]">{item.telefone}</span>
-                              </div>
-                            )}
                           </div>
-                          {item.observacao && (
-                            <div className="pt-2.5 border-t border-[#2D323D]/30">
-                              <span className="text-[10px] font-semibold text-[#9BA1B1] uppercase block mb-1">Escopo do Serviço / Obs:</span>
-                              <p className="text-[#E4E6EB] italic leading-relaxed text-[11px] font-sans">"{item.observacao}"</p>
-                            </div>
-                          )}
+                          
+                          <button
+                            onClick={() => handleDeleteVale(selectedPedreiro.id, p.id)}
+                            className="p-1.5 text-[#9BA1B1] hover:text-rose-500 hover:bg-rose-500/10 rounded transition-all cursor-pointer"
+                            title="Excluir vale"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
-
-                        {/* List of vales on right */}
-                        <div className="lg:col-span-2">
-                          {item.pagamentos.length > 0 ? (
-                            <div className="overflow-x-auto border border-[#2D323D]/40 rounded-xl">
-                              <table className="w-full text-left border-collapse">
-                                <thead>
-                                  <tr className="border-b border-[#2D323D]/40 bg-[#0F1115]/60 text-[9px] text-[#9BA1B1] font-bold uppercase">
-                                    <th className="py-2.5 px-4">Data do Vale</th>
-                                    <th className="py-2.5 px-4">Valor</th>
-                                    <th className="py-2.5 px-4">Forma de Pagto</th>
-                                    <th className="py-2.5 px-4">Descrição / Observação</th>
-                                    <th className="py-2.5 px-4 text-right">Ações</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-[#2D323D]/30 text-xs text-[#E4E6EB]">
-                                  {item.pagamentos.map((p) => (
-                                    <tr key={p.id} className="hover:bg-[#0F1115]/30">
-                                      <td className="py-3 px-4 font-mono text-[#9BA1B1]">
-                                        {new Date(p.data).toLocaleDateString('pt-BR')}
-                                      </td>
-                                      <td className="py-3 px-4 font-mono font-bold text-[#E4E6EB]">
-                                        R$ {p.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                      </td>
-                                      <td className="py-3 px-4 text-[#9BA1B1]">
-                                        <span className="px-1.5 py-0.5 bg-[#0F1115] rounded text-[10px] border border-[#2D323D]/60 text-[#E4E6EB]">
-                                          {p.formaPagamento}
-                                        </span>
-                                      </td>
-                                      <td className="py-3 px-4 text-[#9BA1B1] max-w-xs truncate" title={p.observacao || 'Sem observação'}>
-                                        {p.observacao || <span className="text-[#9BA1B1]/40 italic">Sem observação</span>}
-                                      </td>
-                                      <td className="py-3 px-4 text-right">
-                                        <div className="flex items-center justify-end gap-1.5">
-                                          <button
-                                            onClick={() => openValeModal(item, p)}
-                                            className="p-1 text-[#9BA1B1] hover:text-[#F27D26] hover:bg-[#F27D26]/10 rounded transition-all cursor-pointer"
-                                            title="Editar vale"
-                                          >
-                                            <Edit2 className="w-3 h-3" />
-                                          </button>
-                                          <button
-                                            onClick={() => handleDeleteVale(item, p.id)}
-                                            className="p-1 text-[#9BA1B1] hover:text-rose-500 hover:bg-rose-500/10 rounded transition-all cursor-pointer"
-                                            title="Excluir vale"
-                                          >
-                                            <Trash2 className="w-3 h-3" />
-                                          </button>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          ) : (
-                            <div className="text-center py-8 bg-[#0F1115]/30 rounded-xl border border-dashed border-[#2D323D]/50 text-[#9BA1B1] text-xs">
-                              <Coins className="w-6 h-6 text-[#2D323D]/70 mx-auto mb-2" />
-                              Nenhum vale ou retirada foi registrado ainda para este profissional.
-                              <button 
-                                onClick={() => openValeModal(item)}
-                                className="text-[#F27D26] hover:underline font-bold block mx-auto mt-2"
-                              >
-                                Clique aqui para conceder o primeiro vale.
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 bg-[#13171F] rounded-xl border border-dashed border-[#2D323D]/50 text-[#9BA1B1] text-xs">
+                      Nenhum vale registrado para este pedreiro.
                     </div>
                   )}
                 </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="text-center py-16 text-[#9BA1B1] text-xs">
-            <Briefcase className="w-10 h-10 text-[#2D323D] mx-auto mb-3" />
-            Nenhum profissional de mão de obra registrado para esta obra.
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="text-[#F27D26] hover:underline font-bold block mx-auto mt-2"
-            >
-              Registrar o primeiro profissional agora
-            </button>
-          </div>
-        )}
-      </div>
 
-      {/* Vale / Retirada Form Modal */}
-      {(showValeModalFor || editingVale) && (
-        <div className="fixed inset-0 bg-[#000]/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-[#1C2129] w-full max-w-md p-6 rounded-2xl border border-[#2D323D] shadow-2xl relative">
-            <button
-              onClick={closeValeModal}
-              className="absolute top-4 right-4 text-[#9BA1B1] hover:text-[#E4E6EB] transition-colors p-1 hover:bg-[#2D323D]/40 rounded-lg"
-            >
-              <X className="w-4.5 h-4.5" />
-            </button>
-
-            <h3 className="text-sm font-bold text-[#E4E6EB] uppercase tracking-wider mb-1 flex items-center gap-1.5 border-b border-[#2D323D]/50 pb-3">
-              <Coins className="w-4 h-4 text-emerald-400" />
-              {editingVale ? 'Editar Vale / Retirada' : 'Registrar Vale / Retirada'}
-            </h3>
-            
-            <p className="text-[11px] text-[#9BA1B1] mb-4">
-              Profissional: <span className="font-bold text-[#E4E6EB]">{editingVale ? editingVale.professional.nome : showValeModalFor?.nome}</span>
-            </p>
-
-            {valeError && (
-              <div className="mb-4 p-2.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-xs">
-                {valeError}
+              </div>
+            ) : (
+              <div className="text-center py-8 bg-[#13171F]/50 rounded-xl border border-[#2D323D]/40 text-[#9BA1B1] text-xs flex flex-col items-center justify-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-500/80" />
+                <span>Nenhum pedreiro selecionado.</span>
+                <span className="text-[10px] text-[#9BA1B1]/60">Cadastre ou selecione um pedreiro ao lado para registrar vales e ver o histórico de pagamentos.</span>
               </div>
             )}
 
-            <form onSubmit={handleValeSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                    Valor *
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-xs text-[#9BA1B1] font-bold">R$</span>
-                    <input
-                      type="number"
-                      required
-                      step="0.01"
-                      value={valeValor}
-                      onChange={(e) => setValeValor(e.target.value)}
-                      placeholder="Ex: 500.00"
-                      className="w-full pl-8 pr-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                    Data *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={valeData}
-                    onChange={(e) => setValeData(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                  Observações
-                </label>
-                <input
-                  type="text"
-                  value={valeObservacao}
-                  onChange={(e) => setValeObservacao(e.target.value)}
-                  placeholder="Ex: Adiantamento para compra de sapatos ou final de semana 1."
-                  className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3 border-t border-[#2D323D]/40">
-                <button
-                  type="button"
-                  onClick={closeValeModal}
-                  className="px-4 py-2 text-xs font-semibold text-[#9BA1B1] hover:text-[#E4E6EB] transition-colors cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={valeLoading}
-                  className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-[#0F1115] rounded-lg text-xs font-bold shadow transition-colors cursor-pointer"
-                >
-                  {valeLoading ? 'Salvando...' : (editingVale ? 'Salvar Alterações' : 'Confirmar Vale')}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
-      )}
+
+      </div>
     </div>
   );
 }

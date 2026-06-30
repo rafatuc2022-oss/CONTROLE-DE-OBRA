@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle2, AlertTriangle, XCircle, Info, X } from 'lucide-react';
 
@@ -11,7 +11,7 @@ export interface Toast {
 export interface ConfirmConfig {
   title: string;
   message: string;
-  onConfirm: () => void | Promise<void>;
+  onConfirm?: () => void | Promise<void>;
   onCancel?: () => void;
   confirmText?: string;
   cancelText?: string;
@@ -20,7 +20,7 @@ export interface ConfirmConfig {
 
 interface NotificationContextType {
   showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
-  confirmAction: (config: ConfirmConfig) => void;
+  confirmAction: (config: ConfirmConfig) => Promise<boolean>;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -29,6 +29,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmConfig, setConfirmConfig] = useState<ConfirmConfig | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const resolveRef = useRef<((value: boolean) => void) | null>(null);
 
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' | 'warning' = 'success') => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -47,13 +48,22 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const confirmAction = useCallback((config: ConfirmConfig) => {
     setConfirmConfig(config);
     setConfirmLoading(false);
+    return new Promise<boolean>((resolve) => {
+      resolveRef.current = resolve;
+    });
   }, []);
 
   const handleConfirm = async () => {
     if (!confirmConfig) return;
     setConfirmLoading(true);
     try {
-      await confirmConfig.onConfirm();
+      if (confirmConfig.onConfirm) {
+        await confirmConfig.onConfirm();
+      }
+      if (resolveRef.current) {
+        resolveRef.current(true);
+        resolveRef.current = null;
+      }
     } catch (err: any) {
       showToast(err.message || 'Erro ao realizar ação', 'error');
     } finally {
@@ -66,6 +76,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     if (!confirmConfig) return;
     if (confirmConfig.onCancel) {
       confirmConfig.onCancel();
+    }
+    if (resolveRef.current) {
+      resolveRef.current(false);
+      resolveRef.current = null;
     }
     setConfirmConfig(null);
   };

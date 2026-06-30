@@ -139,7 +139,7 @@ export default function MaoObraView({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nome || !funcao || !valorContrato || !dataPagamento || !formaPagamento) {
+    if (!nome || !valorContrato) {
       setError('Por favor, preencha todos os campos obrigatórios (*).');
       return;
     }
@@ -152,29 +152,33 @@ export default function MaoObraView({
         throw new Error('O valor do orçamento/contrato deve ser um número maior que zero.');
       }
 
+      const defaultFuncao = funcao || 'Mão de obra';
+      const defaultDataPagamento = dataPagamento || new Date().toISOString().split('T')[0];
+      const defaultFormaPagamento = formaPagamento || 'Pix';
+
       if (editingMaoObra) {
         await onUpdateMaoObra(editingMaoObra.id, {
           nome,
-          funcao,
+          funcao: defaultFuncao,
           valorContrato: parsedValContrato,
-          dataPagamento,
-          formaPagamento,
-          cpf,
-          telefone,
-          observacao
+          dataPagamento: defaultDataPagamento,
+          formaPagamento: defaultFormaPagamento,
+          cpf: cpf || '',
+          telefone: telefone || '',
+          observacao: observacao || ''
         }, editingMaoObra);
       } else {
         await onAddMaoObra({
           obraId: obra.id,
           nome,
-          funcao,
+          funcao: defaultFuncao,
           valor: 0, // initially R$ 0,00 paid
           valorContrato: parsedValContrato,
-          dataPagamento,
-          formaPagamento,
-          cpf,
-          telefone,
-          observacao,
+          dataPagamento: defaultDataPagamento,
+          formaPagamento: defaultFormaPagamento,
+          cpf: cpf || '',
+          telefone: telefone || '',
+          observacao: observacao || '',
           pagamentos: []
         });
       }
@@ -446,35 +450,34 @@ export default function MaoObraView({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                  Nome do Profissional / Equipe *
+                  Nome *
                 </label>
                 <input
                   type="text"
                   required
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
-                  placeholder="Ex: Pedro de Alcântara (Pedreiro)"
+                  placeholder="Ex: Pedro de Alcântara"
                   className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
                 />
               </div>
 
               <div>
                 <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                  Cargo / Especialidade *
+                  Telefone
                 </label>
                 <input
                   type="text"
-                  required
-                  value={funcao}
-                  onChange={(e) => setFuncao(e.target.value)}
-                  placeholder="Ex: Pedreiro, Eletricista, Encanador, Mestre de Obra..."
+                  value={telefone}
+                  onChange={(e) => setTelefone(e.target.value)}
+                  placeholder="Ex: (11) 98765-4321"
                   className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
                 />
               </div>
 
               <div>
                 <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                  Valor Fechado do Orçamento (R$) *
+                  Valor do Orçamento (R$) *
                 </label>
                 <input
                   type="number"
@@ -486,78 +489,6 @@ export default function MaoObraView({
                   className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
                 />
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                  Data de Contratação *
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={dataPagamento}
-                  onChange={(e) => setDataPagamento(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                  Forma de Pagto Preferencial *
-                </label>
-                <select
-                  value={formaPagamento}
-                  onChange={(e) => setFormaPagamento(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
-                >
-                  <option value="Pix">Pix</option>
-                  <option value="Dinheiro">Dinheiro em Espécie</option>
-                  <option value="Transferência">Transferência Bancária</option>
-                  <option value="Boleto">Boleto Bancário</option>
-                  <option value="Cheque">Cheque</option>
-                  <option value="Outro">Outro</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                  CPF (Opcional)
-                </label>
-                <input
-                  type="text"
-                  value={cpf}
-                  onChange={(e) => setCpf(e.target.value)}
-                  placeholder="000.000.000-00"
-                  className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                  Telefone (Opcional)
-                </label>
-                <input
-                  type="text"
-                  value={telefone}
-                  onChange={(e) => setTelefone(e.target.value)}
-                  placeholder="(00) 00000-0000"
-                  className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                Escopo do Contrato / Observações
-              </label>
-              <textarea
-                value={observacao}
-                onChange={(e) => setObservacao(e.target.value)}
-                placeholder="Ex: Reboco completo da casa e colocação de pisos nas áreas externas."
-                rows={2}
-                className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
-              />
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
@@ -890,28 +821,28 @@ export default function MaoObraView({
             )}
 
             <form onSubmit={handleValeSubmit} className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                  Valor Retirado (R$) *
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-xs text-[#9BA1B1] font-bold">R$</span>
-                  <input
-                    type="number"
-                    required
-                    step="0.01"
-                    value={valeValor}
-                    onChange={(e) => setValeValor(e.target.value)}
-                    placeholder="Ex: 500.00"
-                    className="w-full pl-8 pr-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
-                  />
-                </div>
-              </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                    Data do Adiantamento *
+                    Valor *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-xs text-[#9BA1B1] font-bold">R$</span>
+                    <input
+                      type="number"
+                      required
+                      step="0.01"
+                      value={valeValor}
+                      onChange={(e) => setValeValor(e.target.value)}
+                      placeholder="Ex: 500.00"
+                      className="w-full pl-8 pr-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
+                    Data *
                   </label>
                   <input
                     type="date"
@@ -921,29 +852,11 @@ export default function MaoObraView({
                     className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
                   />
                 </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                    Forma de Pagamento *
-                  </label>
-                  <select
-                    value={valeFormaPagamento}
-                    onChange={(e) => setValeFormaPagamento(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
-                  >
-                    <option value="Pix">Pix</option>
-                    <option value="Dinheiro">Dinheiro em Espécie</option>
-                    <option value="Transferência">Transferência Bancária</option>
-                    <option value="Boleto">Boleto Bancário</option>
-                    <option value="Cheque">Cheque</option>
-                    <option value="Outro">Outro</option>
-                  </select>
-                </div>
               </div>
 
               <div>
                 <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                  Descrição / Finalidade do Vale
+                  Observações
                 </label>
                 <input
                   type="text"

@@ -2,9 +2,9 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Global Safety Net - Default Deny
+    // Global Safety Net - Permissive Access
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if true;
     }
 
     // Primitive Helpers

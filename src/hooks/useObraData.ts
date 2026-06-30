@@ -483,22 +483,24 @@ export function useObraData(userId: string | null) {
         valor: newTotalPaid
       });
       
-      const saidaRecord = {
-        obraId: profData.obraId,
-        valor: vale.valor,
-        data: vale.data,
-        categoria: 'Mão de obra' as const,
-        descricao: `Vale/Pgto: ${profData.nome} (${profData.funcao})`,
-        observacao: vale.observacao || '',
-        maoObraId: maoObraId,
-        paymentId: paymentId
-      };
-      await addDoc(collection(db, 'saidas'), saidaRecord);
+      if (vale.tipo !== 'vale') {
+        const saidaRecord = {
+          obraId: profData.obraId,
+          valor: vale.valor,
+          data: vale.data,
+          categoria: 'Mão de obra' as const,
+          descricao: `Pgto Efetivo: ${profData.nome} (${profData.funcao})`,
+          observacao: vale.observacao || '',
+          maoObraId: maoObraId,
+          paymentId: paymentId
+        };
+        await addDoc(collection(db, 'saidas'), saidaRecord);
+      }
       
       setTimeout(() => updateProjectBalance(profData.obraId), 200);
-      showToast('Vale registrado com sucesso!', 'success');
+      showToast(vale.tipo === 'vale' ? 'Vale registrado com sucesso!' : 'Pagamento registrado com sucesso!', 'success');
     } catch (err: any) {
-      showToast('Erro ao registrar vale: ' + err.message, 'error');
+      showToast('Erro ao registrar: ' + err.message, 'error');
       throw err;
     }
   };
@@ -530,9 +532,9 @@ export function useObraData(userId: string | null) {
       }
       
       setTimeout(() => updateProjectBalance(profData.obraId), 200);
-      showToast('Vale excluído com sucesso!', 'success');
+      showToast('Lançamento excluído com sucesso!', 'success');
     } catch (err: any) {
-      showToast('Erro ao excluir vale: ' + err.message, 'error');
+      showToast('Erro ao excluir: ' + err.message, 'error');
       throw err;
     }
   };
@@ -545,6 +547,10 @@ export function useObraData(userId: string | null) {
       const profData = professionalSnap.data() as MaoObra;
       
       const currentPagamentos = profData.pagamentos || [];
+      const targetPayment = currentPagamentos.find(p => p.id === paymentId);
+      const oldType = targetPayment?.tipo || 'final';
+      const newType = updatedFields.tipo !== undefined ? updatedFields.tipo : oldType;
+
       const updatedPagamentos = currentPagamentos.map(p => {
         if (p.id === paymentId) {
           return { ...p, ...updatedFields };
@@ -564,18 +570,46 @@ export function useObraData(userId: string | null) {
         where('paymentId', '==', paymentId)
       );
       const matchingSaidasSnap = await getDocs(matchingSaidasQuery);
-      for (const d of matchingSaidasSnap.docs) {
-        await updateDoc(doc(db, 'saidas', d.id), {
-          valor: updatedFields.valor !== undefined ? updatedFields.valor : d.data().valor,
-          data: updatedFields.data || d.data().data,
-          observacao: updatedFields.observacao !== undefined ? updatedFields.observacao : d.data().observacao || ''
-        });
+
+      if (newType === 'vale') {
+        // If type is now vale, make sure no matching saida exists
+        for (const d of matchingSaidasSnap.docs) {
+          await deleteDoc(doc(db, 'saidas', d.id));
+        }
+      } else {
+        // If type is now final / other, make sure a saida exists and is up to date
+        const finalValue = updatedFields.valor !== undefined ? updatedFields.valor : (targetPayment?.valor || 0);
+        const finalData = updatedFields.data || (targetPayment?.data || new Date().toISOString().split('T')[0]);
+        const finalObs = updatedFields.observacao !== undefined ? updatedFields.observacao : (targetPayment?.observacao || '');
+
+        if (matchingSaidasSnap.empty) {
+          const saidaRecord = {
+            obraId: profData.obraId,
+            valor: finalValue,
+            data: finalData,
+            categoria: 'Mão de obra' as const,
+            descricao: `Pgto Efetivo: ${profData.nome} (${profData.funcao})`,
+            observacao: finalObs,
+            maoObraId: maoObraId,
+            paymentId: paymentId
+          };
+          await addDoc(collection(db, 'saidas'), saidaRecord);
+        } else {
+          for (const d of matchingSaidasSnap.docs) {
+            await updateDoc(doc(db, 'saidas', d.id), {
+              valor: finalValue,
+              data: finalData,
+              descricao: `Pgto Efetivo: ${profData.nome} (${profData.funcao})`,
+              observacao: finalObs
+            });
+          }
+        }
       }
       
       setTimeout(() => updateProjectBalance(profData.obraId), 200);
-      showToast('Vale atualizado com sucesso!', 'success');
+      showToast('Lançamento atualizado com sucesso!', 'success');
     } catch (err: any) {
-      showToast('Erro ao atualizar vale: ' + err.message, 'error');
+      showToast('Erro ao atualizar: ' + err.message, 'error');
       throw err;
     }
   };

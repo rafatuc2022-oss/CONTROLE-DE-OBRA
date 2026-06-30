@@ -10,7 +10,8 @@ import {
   AlertTriangle,
   LayoutDashboard,
   Plus,
-  X
+  X,
+  FileText
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -23,11 +24,10 @@ import {
   XAxis, 
   YAxis, 
   CartesianGrid, 
-  LineChart, 
-  Line 
 } from 'recharts';
 import { Obra, Entrada, Saida, MaoObra, Material } from '../types';
 import { useNotification } from '../context/NotificationContext';
+import ReportModal from './ReportModal';
 
 interface DashboardViewProps {
   obra: Obra;
@@ -52,6 +52,7 @@ export default function DashboardView({
   
   // Quick Add Entrada Form States
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
   const [valor, setValor] = useState('');
   const [data, setData] = useState(new Date().toISOString().split('T')[0]);
   const [origem, setOrigem] = useState('');
@@ -213,7 +214,14 @@ export default function DashboardView({
             Acompanhe o balanço geral, andamento financeiro e registre novas entradas de capital.
           </p>
         </div>
-        <div>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setShowReportModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+          >
+            <FileText className="w-4 h-4" />
+            Gerar Relatório
+          </button>
           <button
             onClick={() => setShowAddForm(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
@@ -630,6 +638,16 @@ export default function DashboardView({
           </div>
         )}
       </div>
+
+      <ReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        obra={obra}
+        entradas={entradas}
+        saidas={saidas}
+        maoObra={maoObra}
+        materiais={materiais}
+      />
     </div>
   );
 }

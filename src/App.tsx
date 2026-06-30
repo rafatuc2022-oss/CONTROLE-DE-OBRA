@@ -10,6 +10,7 @@ import {
   DollarSign, 
   ShoppingBag, 
   Coins, 
+  Key,
   Store, 
   Sparkles, 
   LogOut, 
@@ -33,6 +34,7 @@ import MateriaisView from './components/MateriaisView';
 import MaoObraView from './components/MaoObraView';
 import ComparacaoView from './components/ComparacaoView';
 import AIChatView from './components/AIChatView';
+import ChangePasswordModal from './components/ChangePasswordModal';
 
 type TabType = 'dashboard' | 'obras' | 'financeiro' | 'materiais' | 'maoObra' | 'comparador' | 'iaChat';
 
@@ -43,6 +45,7 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(false);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
 
   // PWA Install Prompt State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -376,7 +379,7 @@ export default function App() {
 
         {/* Profile Card / Footer info */}
         <div className="p-4 border-t border-[#2D323D] bg-[#101318] flex items-center justify-between">
-          <div className="truncate pr-2">
+          <div className="truncate pr-2 flex-1">
             <span className="block text-xs font-bold text-[#E4E6EB] truncate">
               {user.displayName || 'Proprietário'}
             </span>
@@ -385,13 +388,22 @@ export default function App() {
             </span>
           </div>
 
-          <button
-            onClick={handleLogout}
-            className="p-2 bg-[#1C2129] hover:bg-[#ef4444]/10 text-[#9BA1B1] hover:text-[#ef4444] rounded-lg transition-colors cursor-pointer"
-            title="Sair do aplicativo"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={() => setShowChangePasswordModal(true)}
+              className="p-2 bg-[#1C2129] hover:bg-amber-500/10 text-[#9BA1B1] hover:text-amber-500 rounded-lg transition-colors cursor-pointer"
+              title="Alterar Senha"
+            >
+              <Key className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleLogout}
+              className="p-2 bg-[#1C2129] hover:bg-[#ef4444]/10 text-[#9BA1B1] hover:text-[#ef4444] rounded-lg transition-colors cursor-pointer"
+              title="Sair do aplicativo"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -599,6 +611,11 @@ export default function App() {
           )}
         </main>
       </div>
+
+      <ChangePasswordModal 
+        isOpen={showChangePasswordModal} 
+        onClose={() => setShowChangePasswordModal(false)} 
+      />
     </div>
   );
 }

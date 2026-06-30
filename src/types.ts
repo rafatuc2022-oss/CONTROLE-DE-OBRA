@@ -35,6 +35,7 @@ export interface PagamentoMaoObra {
   data: string;
   formaPagamento: string;
   observacao?: string;
+  tipo?: 'vale' | 'final';
 }
 
 export interface Saida {

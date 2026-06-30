@@ -1,25 +1,22 @@
 import React, { useState } from 'react';
 import { 
   signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
   sendPasswordResetEmail, 
   signInWithPopup, 
   GoogleAuthProvider 
 } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { motion } from 'motion/react';
-import { Hammer, Lock, Mail, User, ShieldAlert, CheckCircle, Smartphone } from 'lucide-react';
+import { Hammer, Lock, Mail, ShieldAlert, CheckCircle } from 'lucide-react';
 
 interface AuthScreenProps {
   onSuccess: (userId: string, email: string, displayName?: string) => void;
 }
 
 export default function AuthScreen({ onSuccess }: AuthScreenProps) {
-  const [isSignUp, setIsSignUp] = useState(false);
   const [isForgot, setIsForgot] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -35,9 +32,6 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
         await sendPasswordResetEmail(auth, email);
         setSuccessMsg('E-mail de recuperação enviado com sucesso!');
         setIsForgot(false);
-      } else if (isSignUp) {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        onSuccess(userCredential.user.uid, userCredential.user.email || '', name || 'Proprietário');
       } else {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         onSuccess(userCredential.user.uid, userCredential.user.email || '', userCredential.user.displayName || '');
@@ -45,13 +39,9 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
     } catch (err: any) {
       console.error(err);
       if (err.code === 'auth/user-not-found') {
-        setError('Usuário não encontrado. Cadastre-se para começar.');
+        setError('Usuário não encontrado. Entre em contato com o administrador.');
       } else if (err.code === 'auth/wrong-password') {
         setError('Senha incorreta. Tente novamente.');
-      } else if (err.code === 'auth/email-already-in-use') {
-        setError('Este e-mail já está sendo utilizado.');
-      } else if (err.code === 'auth/weak-password') {
-        setError('A senha deve ter no mínimo 6 caracteres.');
       } else if (err.code === 'auth/invalid-email') {
         setError('Formato de e-mail inválido.');
       } else {
@@ -71,7 +61,6 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
       onSuccess(result.user.uid, result.user.email || '', result.user.displayName || '');
     } catch (err: any) {
       console.error(err);
-      // Fallback in case of popup block / frame block issues
       setError('Não foi possível conectar com o Google no frame. Use login por e-mail.');
     } finally {
       setLoading(false);
@@ -121,27 +110,6 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
           )}
 
           <form onSubmit={handleAuth} className="space-y-5">
-            {isSignUp && !isForgot && (
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                  Seu Nome completo
-                </label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 dark:text-slate-500">
-                    <User className="w-5 h-5" />
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
-                    placeholder="Ex: Roberto Silva"
-                  />
-                </div>
-              </div>
-            )}
-
             <div>
               <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                 E-mail corporativo ou pessoal
@@ -167,15 +135,13 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Sua Senha secreta
                   </label>
-                  {!isSignUp && (
-                    <button
-                      type="button"
-                      onClick={() => { setIsForgot(true); setError(null); }}
-                      className="text-xs text-violet-600 dark:text-violet-400 hover:underline"
-                    >
-                      Esqueceu?
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => { setIsForgot(true); setError(null); }}
+                    className="text-xs text-violet-600 dark:text-violet-400 hover:underline"
+                  >
+                    Esqueceu?
+                  </button>
                 </div>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 dark:text-slate-500">
@@ -196,14 +162,12 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-violet-600 hover:bg-violet-700 text-white font-medium rounded-lg text-sm transition-colors flex items-center justify-center gap-2 shadow-md shadow-violet-500/10 disabled:opacity-50"
+              className="w-full py-3 bg-violet-600 hover:bg-violet-700 text-white font-medium rounded-lg text-sm transition-colors flex items-center justify-center gap-2 shadow-md shadow-violet-500/10 disabled:opacity-50 cursor-pointer"
             >
               {loading ? (
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               ) : isForgot ? (
                 'Enviar Recuperação'
-              ) : isSignUp ? (
-                'Criar Conta'
               ) : (
                 'Acessar Painel'
               )}
@@ -223,7 +187,7 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
               type="button"
               onClick={handleGoogleSignIn}
               disabled={loading}
-              className="flex items-center justify-center gap-2 py-2.5 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+              className="flex items-center justify-center gap-2 py-2.5 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24">
                 <path
@@ -249,7 +213,7 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
             <button
               type="button"
               onClick={handleDemoSignIn}
-              className="flex items-center justify-center gap-2 py-2.5 bg-slate-900 hover:bg-slate-950 text-white dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 rounded-lg text-sm font-medium transition-colors border border-transparent shadow"
+              className="flex items-center justify-center gap-2 py-2.5 bg-slate-900 hover:bg-slate-950 text-white dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 rounded-lg text-sm font-medium transition-colors border border-transparent shadow cursor-pointer"
             >
               <span>Acesso Rápido</span>
             </button>
@@ -261,31 +225,13 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
               <button
                 type="button"
                 onClick={() => { setIsForgot(false); setError(null); }}
-                className="text-violet-600 dark:text-violet-400 hover:underline"
+                className="text-violet-600 dark:text-violet-400 hover:underline cursor-pointer"
               >
                 Voltar para o Login
               </button>
-            ) : isSignUp ? (
-              <p>
-                Já possui uma conta?{' '}
-                <button
-                  type="button"
-                  onClick={() => { setIsSignUp(false); setError(null); }}
-                  className="text-violet-600 dark:text-violet-400 hover:underline font-semibold"
-                >
-                  Entrar
-                </button>
-              </p>
             ) : (
-              <p>
-                Primeira vez aqui?{' '}
-                <button
-                  type="button"
-                  onClick={() => { setIsSignUp(true); setError(null); }}
-                  className="text-violet-600 dark:text-violet-400 hover:underline font-semibold"
-                >
-                  Criar conta grátis
-                </button>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
+                Cadastro de novos usuários corporativos é feito exclusivamente pelo administrador da construtora.
               </p>
             )}
           </div>

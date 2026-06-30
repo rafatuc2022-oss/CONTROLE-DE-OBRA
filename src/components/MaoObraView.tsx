@@ -56,6 +56,8 @@ export default function MaoObraView({
   // Vale Form Fields
   const [valeValor, setValeValor] = useState('');
   const [valeData, setValeData] = useState(new Date().toISOString().split('T')[0]);
+  const [tipoPagamento, setTipoPagamento] = useState<'vale' | 'final'>('vale');
+  const [valeObservacao, setValeObservacao] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [valeLoading, setValeLoading] = useState(false);
@@ -76,7 +78,8 @@ export default function MaoObraView({
             valor: item.valor,
             data: item.dataPagamento || new Date().toISOString().split('T')[0],
             formaPagamento: item.formaPagamento || 'Pix',
-            observacao: item.observacao || 'Lançamento original'
+            observacao: item.observacao || 'Lançamento original',
+            tipo: 'final'
           }
         ];
       }
@@ -118,21 +121,32 @@ export default function MaoObraView({
     return sanitizedMaoObra.reduce((sum, item) => sum + item.valorContrato, 0);
   }, [sanitizedMaoObra]);
 
-  const totalPago = useMemo(() => {
+  const totalValesGeral = useMemo(() => {
     return sanitizedMaoObra.reduce((sum, item) => {
-      const pSum = item.pagamentos.reduce((acc, p) => acc + p.valor, 0);
-      return sum + pSum;
+      const vSum = item.pagamentos
+        .filter(p => p.tipo === 'vale')
+        .reduce((acc, p) => acc + p.valor, 0);
+      return sum + vSum;
+    }, 0);
+  }, [sanitizedMaoObra]);
+
+  const totalFinaisGeral = useMemo(() => {
+    return sanitizedMaoObra.reduce((sum, item) => {
+      const fSum = item.pagamentos
+        .filter(p => p.tipo === 'final' || !p.tipo)
+        .reduce((acc, p) => acc + p.valor, 0);
+      return sum + fSum;
     }, 0);
   }, [sanitizedMaoObra]);
 
   const totalDevedor = useMemo(() => {
-    return Math.max(0, totalOrcado - totalPago);
-  }, [totalOrcado, totalPago]);
+    return Math.max(0, totalOrcado - totalValesGeral - totalFinaisGeral);
+  }, [totalOrcado, totalValesGeral, totalFinaisGeral]);
 
   const percentualGeral = useMemo(() => {
     if (totalOrcado === 0) return 0;
-    return Math.min(100, Math.round((totalPago / totalOrcado) * 100));
-  }, [totalOrcado, totalPago]);
+    return Math.min(100, Math.round(((totalValesGeral + totalFinaisGeral) / totalOrcado) * 100));
+  }, [totalOrcado, totalValesGeral, totalFinaisGeral]);
 
   // Reset registration form
   const resetForm = () => {
@@ -206,17 +220,17 @@ export default function MaoObraView({
     }
   };
 
-  // Submit Vale/Adiantamento
+  // Submit Vale/Adiantamento or Pagamento Efetivo
   const handleValeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetPedreiroId = activeSelectedId;
 
     if (!targetPedreiroId) {
-      setValeError('Selecione um pedreiro para registrar o vale.');
+      setValeError('Selecione um pedreiro para registrar o pagamento.');
       return;
     }
     if (!valeValor || !valeData) {
-      setValeError('Preencha o valor do vale e a data de pagamento.');
+      setValeError('Preencha o valor e a data do pagamento.');
       return;
     }
 
@@ -225,23 +239,30 @@ export default function MaoObraView({
     try {
       const parsedVal = Number(valeValor);
       if (isNaN(parsedVal) || parsedVal <= 0) {
-        throw new Error('O valor do vale deve ser maior que zero.');
+        throw new Error('O valor deve ser maior que zero.');
       }
 
       await onAddMaoObraVale(targetPedreiroId, {
         valor: parsedVal,
         data: valeData,
         formaPagamento: 'Pix',
-        observacao: 'Pagamento de Vale'
+        observacao: valeObservacao || (tipoPagamento === 'vale' ? 'Pagamento de Vale' : 'Pagamento Efetivo (Final)'),
+        tipo: tipoPagamento
       });
 
       // Reset vale fields
       setValeValor('');
+      setValeObservacao('');
       setValeData(new Date().toISOString().split('T')[0]);
-      showToast('Vale registrado e saldo atualizado com sucesso!', 'success');
+      showToast(
+        tipoPagamento === 'vale' 
+          ? 'Vale registrado e abatido do orçamento (sem alterar caixa da obra)!' 
+          : 'Pagamento efetivo registrado e descontado do caixa da obra!', 
+        'success'
+      );
     } catch (err: any) {
       console.error(err);
-      setValeError(err.message || 'Erro ao registrar o vale. Tente novamente.');
+      setValeError(err.message || 'Erro ao registrar o pagamento. Tente novamente.');
     } finally {
       setValeLoading(false);
     }
@@ -329,11 +350,11 @@ export default function MaoObraView({
             <Coins className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[10px] text-[#9BA1B1] uppercase font-semibold">Total de Contratos</p>
+            <p className="text-[10px] text-[#9BA1B1] uppercase font-semibold">Orçamento Total</p>
             <h3 className="text-base font-bold text-[#E4E6EB] mt-0.5">
               R$ {totalOrcado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </h3>
-            <p className="text-[9px] text-[#9BA1B1]">{sanitizedMaoObra.length} profissionais contratados</p>
+            <p className="text-[9px] text-[#9BA1B1]">{sanitizedMaoObra.length} profissionais</p>
           </div>
         </div>
 
@@ -342,11 +363,24 @@ export default function MaoObraView({
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[10px] text-[#9BA1B1] uppercase font-semibold">Total de Vales Pagos</p>
+            <p className="text-[10px] text-[#9BA1B1] uppercase font-semibold">Vales Concedidos</p>
             <h3 className="text-base font-bold text-emerald-400 mt-0.5">
-              R$ {totalPago.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              R$ {totalValesGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </h3>
-            <p className="text-[9px] text-[#9BA1B1]">{percentualGeral}% quitado</p>
+            <p className="text-[9px] text-[#9BA1B1]">Antecipação (Sem impacto no caixa)</p>
+          </div>
+        </div>
+
+        <div className="bg-[#1C2129] p-4 rounded-xl border border-[#2D323D] flex items-center gap-3">
+          <div className="p-2.5 bg-amber-500/10 text-amber-500 rounded-lg">
+            <DollarSign className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[10px] text-[#9BA1B1] uppercase font-semibold">Efetivamente Pago</p>
+            <h3 className="text-base font-bold text-amber-500 mt-0.5">
+              R$ {totalFinaisGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </h3>
+            <p className="text-[9px] text-[#9BA1B1]">Liquidado (Descontado do caixa)</p>
           </div>
         </div>
 
@@ -359,20 +393,7 @@ export default function MaoObraView({
             <h3 className="text-base font-bold text-[#F27D26] mt-0.5">
               R$ {totalDevedor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </h3>
-            <p className="text-[9px] text-[#9BA1B1]">Saldo restante de mão de obra</p>
-          </div>
-        </div>
-
-        <div className="bg-[#1C2129] p-4 rounded-xl border border-[#2D323D] flex flex-col justify-center">
-          <div className="flex justify-between text-[10px] text-[#9BA1B1] font-bold uppercase mb-1">
-            <span>Progresso Geral</span>
-            <span>{percentualGeral}%</span>
-          </div>
-          <div className="w-full bg-[#0F1115] h-2 rounded-full overflow-hidden border border-[#2D323D]/50">
-            <div 
-              className="bg-gradient-to-r from-[#F27D26] to-emerald-500 h-full rounded-full transition-all duration-500" 
-              style={{ width: `${percentualGeral}%` }}
-            />
+            <p className="text-[9px] text-[#9BA1B1]">Balanço final a quitar</p>
           </div>
         </div>
       </div>
@@ -489,8 +510,13 @@ export default function MaoObraView({
             <div className="space-y-3">
               {filteredMaoObra.length > 0 ? (
                 filteredMaoObra.map((item) => {
-                  const totalPagoProf = item.pagamentos.reduce((acc, p) => acc + p.valor, 0);
-                  const devedorProf = Math.max(0, item.valorContrato - totalPagoProf);
+                  const totalValesProf = item.pagamentos
+                    .filter(p => p.tipo === 'vale')
+                    .reduce((acc, p) => acc + p.valor, 0);
+                  const totalFinaisProf = item.pagamentos
+                    .filter(p => p.tipo === 'final' || !p.tipo)
+                    .reduce((acc, p) => acc + p.valor, 0);
+                  const devedorProf = Math.max(0, item.valorContrato - totalValesProf - totalFinaisProf);
                   const isSelected = activeSelectedId === item.id;
                   const isPago = devedorProf <= 0;
 
@@ -528,7 +554,7 @@ export default function MaoObraView({
                         <div>
                           {isPago ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[9px] font-bold uppercase tracking-wider animate-pulse">
-                              ● Pago
+                              ● Quitante
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-[9px] font-bold uppercase tracking-wider">
@@ -539,7 +565,7 @@ export default function MaoObraView({
                       </div>
 
                       {/* Mini Financial Display inside card */}
-                      <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-[#2D323D]/50 text-left text-[11px]">
+                      <div className="grid grid-cols-4 gap-2 mt-4 pt-3 border-t border-[#2D323D]/50 text-left text-[10px]">
                         <div>
                           <span className="text-[9px] text-[#9BA1B1] uppercase block">Contratado</span>
                           <span className="font-semibold text-[#E4E6EB] font-mono">
@@ -547,13 +573,19 @@ export default function MaoObraView({
                           </span>
                         </div>
                         <div>
-                          <span className="text-[9px] text-[#9BA1B1] uppercase block">Pago</span>
+                          <span className="text-[9px] text-[#9BA1B1] uppercase block">Vales</span>
                           <span className="font-semibold text-emerald-400 font-mono">
-                            R$ {totalPagoProf.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            R$ {totalValesProf.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
                         <div>
-                          <span className="text-[9px] text-[#9BA1B1] uppercase block">Saldo Restante</span>
+                          <span className="text-[9px] text-[#9BA1B1] uppercase block">Efet. Pago</span>
+                          <span className="font-semibold text-amber-500 font-mono">
+                            R$ {totalFinaisProf.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-[#9BA1B1] uppercase block">Restante</span>
                           <span className="font-semibold text-[#F27D26] font-mono">
                             R$ {devedorProf.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </span>
@@ -602,14 +634,14 @@ export default function MaoObraView({
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Pagamento de Vale Section (col-span-5) */}
+        {/* RIGHT COLUMN: Pagamento / Vale Section (col-span-5) */}
         <div className="lg:col-span-5 space-y-4">
           <div className="bg-[#1C2129] rounded-2xl border border-[#2D323D] p-5 space-y-5 shadow-md">
             
             <div className="border-b border-[#2D323D]/50 pb-3 flex items-center gap-2">
               <Coins className="w-4.5 h-4.5 text-emerald-400" />
               <h3 className="text-xs font-bold text-[#E4E6EB] uppercase tracking-wider">
-                Pagamento de Vale
+                Registrar Pagamento / Vale
               </h3>
             </div>
 
@@ -634,7 +666,7 @@ export default function MaoObraView({
                 </p>
               </div>
 
-              {/* Form to submit vale if a pedreiro is selected */}
+              {/* Form to submit vale/final if a pedreiro is selected */}
               <form onSubmit={handleValeSubmit} className="space-y-4">
                 {valeError && (
                   <div className="p-2.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-xs animate-fadeIn">
@@ -642,10 +674,58 @@ export default function MaoObraView({
                   </div>
                 )}
 
+                {/* Payment Type Selector Toggle */}
+                <div>
+                  <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
+                    Tipo de Lançamento *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 bg-[#0F1115] p-1 rounded-lg border border-[#2D323D]">
+                    <button
+                      type="button"
+                      onClick={() => setTipoPagamento('vale')}
+                      className={`py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                        tipoPagamento === 'vale'
+                          ? 'bg-[#1C2129] text-emerald-400 shadow-sm border border-[#2D323D]'
+                          : 'text-[#9BA1B1] hover:text-[#E4E6EB]'
+                      }`}
+                    >
+                      Vale (Adiantamento)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTipoPagamento('final');
+                        if (selectedPedreiro) {
+                          const vVales = selectedPedreiro.pagamentos
+                            .filter(p => p.tipo === 'vale')
+                            .reduce((sum, p) => sum + p.valor, 0);
+                          const vFinais = selectedPedreiro.pagamentos
+                            .filter(p => p.tipo === 'final' || !p.tipo)
+                            .reduce((sum, p) => sum + p.valor, 0);
+                          const remainingLiquid = Math.max(0, selectedPedreiro.valorContrato - vVales - vFinais);
+                          setValeValor(remainingLiquid > 0 ? remainingLiquid.toString() : '');
+                        }
+                      }}
+                      className={`py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                        tipoPagamento === 'final'
+                          ? 'bg-[#1C2129] text-amber-500 shadow-sm border border-[#2D323D]'
+                          : 'text-[#9BA1B1] hover:text-[#E4E6EB]'
+                      }`}
+                    >
+                      Pgto Efetivo (Final)
+                    </button>
+                  </div>
+                  <p className="text-[9px] text-[#9BA1B1]/60 mt-1">
+                    {tipoPagamento === 'vale' 
+                      ? 'Não abate do caixa da obra, apenas reduz o orçamento do profissional.' 
+                      : 'Abate diretamente do caixa da obra.'}
+                  </p>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                      Data do Pagamento *
+                      Data do Lançamento *
                     </label>
                     <input
                       type="date"
@@ -658,7 +738,7 @@ export default function MaoObraView({
 
                   <div>
                     <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                      Valor do Vale (R$) *
+                      Valor (R$) *
                     </label>
                     <div className="relative">
                       <span className="absolute left-3 top-2.5 text-xs text-[#9BA1B1] font-bold font-mono">R$</span>
@@ -675,13 +755,26 @@ export default function MaoObraView({
                   </div>
                 </div>
 
+                <div>
+                  <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
+                    Observação / Descrição
+                  </label>
+                  <input
+                    type="text"
+                    value={valeObservacao}
+                    onChange={(e) => setValeObservacao(e.target.value)}
+                    placeholder="Ex: Adiantamento para compra de EPI, pagamento de quitação"
+                    className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] placeholder-[#9BA1B1]/40 focus:outline-none focus:border-[#F27D26]"
+                  />
+                </div>
+
                 <button
                   type="submit"
                   disabled={valeLoading || !activeSelectedId}
                   className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/20 disabled:text-[#9BA1B1]/50 disabled:cursor-not-allowed text-[#0F1115] rounded-lg text-xs font-bold shadow transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <Plus className="w-4 h-4" />
-                  {valeLoading ? 'Registrando...' : 'Registrar Vale'}
+                  {valeLoading ? 'Registrando...' : (tipoPagamento === 'vale' ? 'Registrar Vale' : 'Registrar Pgto Efetivo')}
                 </button>
               </form>
             </div>
@@ -691,78 +784,112 @@ export default function MaoObraView({
               <div className="pt-4 border-t border-[#2D323D]/50 space-y-4 animate-fadeIn">
                 
                 {/* Resumo Financeiro do Pedreiro Selecionado */}
-                <div className="bg-[#13171F] p-4 rounded-xl border border-[#2D323D]/60 space-y-3">
-                  <div className="flex justify-between items-center border-b border-[#2D323D]/40 pb-2">
-                    <span className="text-[10px] font-bold text-[#F27D26] uppercase">Resumo de Quitação</span>
-                    {selectedPedreiro.valorContrato - selectedPedreiro.pagamentos.reduce((acc, p) => acc + p.valor, 0) <= 0 ? (
-                      <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-[9px] font-bold rounded uppercase">
-                        Quito (Pago)
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 text-[9px] font-bold rounded uppercase">
-                        Em Aberto
-                      </span>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-1.5 text-xs text-[#E4E6EB]">
-                    <div className="flex justify-between">
-                      <span className="text-[#9BA1B1]">Valor total da mão de obra:</span>
-                      <span className="font-semibold font-mono text-[#E4E6EB]">
-                        R$ {selectedPedreiro.valorContrato.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                    
-                    <div className="flex justify-between">
-                      <span className="text-[#9BA1B1]">Total de vales pagos:</span>
-                      <span className="font-semibold font-mono text-emerald-400">
-                        R$ {selectedPedreiro.pagamentos.reduce((acc, p) => acc + p.valor, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                    
-                    <div className="flex justify-between pt-1.5 border-t border-[#2D323D]/30 text-sm font-bold">
-                      <span className="text-[#9BA1B1]">Saldo restante a pagar:</span>
-                      <span className="font-mono text-[#F27D26]">
-                        R$ {Math.max(0, selectedPedreiro.valorContrato - selectedPedreiro.pagamentos.reduce((acc, p) => acc + p.valor, 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                {(() => {
+                  const totalVales = selectedPedreiro.pagamentos
+                    .filter(p => p.tipo === 'vale')
+                    .reduce((sum, p) => sum + p.valor, 0);
+                  const totalFinais = selectedPedreiro.pagamentos
+                    .filter(p => p.tipo === 'final' || !p.tipo)
+                    .reduce((sum, p) => sum + p.valor, 0);
+                  const remainingLiquid = Math.max(0, selectedPedreiro.valorContrato - totalVales - totalFinais);
 
-                {/* Historico de Vales do Pedreiro Selecionado */}
+                  return (
+                    <div className="bg-[#13171F] p-4 rounded-xl border border-[#2D323D]/60 space-y-3">
+                      <div className="flex justify-between items-center border-b border-[#2D323D]/40 pb-2">
+                        <span className="text-[10px] font-bold text-[#F27D26] uppercase">Resumo de Quitação</span>
+                        {remainingLiquid <= 0 ? (
+                          <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-[9px] font-bold rounded uppercase">
+                            Quitado (Pago)
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 text-[9px] font-bold rounded uppercase">
+                            Em Aberto
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div className="space-y-1.5 text-xs text-[#E4E6EB]">
+                        <div className="flex justify-between">
+                          <span className="text-[#9BA1B1]">Orçamento Total Contratado:</span>
+                          <span className="font-semibold font-mono text-[#E4E6EB]">
+                            R$ {selectedPedreiro.valorContrato.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        
+                        <div className="flex justify-between">
+                          <span className="text-[#9BA1B1]">(-) Total de Vales Concedidos:</span>
+                          <span className="font-semibold font-mono text-emerald-400">
+                            R$ {totalVales.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between">
+                          <span className="text-[#9BA1B1]">(-) Valor Efetivamente Pago:</span>
+                          <span className="font-semibold font-mono text-amber-500">
+                            R$ {totalFinais.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        
+                        <div className="flex justify-between pt-1.5 border-t border-[#2D323D]/30 text-sm font-bold">
+                          <span className="text-[#9BA1B1]">Valor Líquido Restante:</span>
+                          <span className="font-mono text-[#F27D26]">
+                            R$ {remainingLiquid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Historico de Lançamentos do Pedreiro Selecionado */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-1.5 text-[#9BA1B1] text-[10px] uppercase font-bold tracking-wider">
                     <History className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Histórico de Vales ({selectedPedreiro.nome})</span>
+                    <span>Lançamentos Registrados ({selectedPedreiro.nome})</span>
                   </div>
 
                   {selectedPedreiro.pagamentos.length > 0 ? (
                     <div className="border border-[#2D323D]/40 rounded-xl overflow-hidden max-h-56 overflow-y-auto divide-y divide-[#2D323D]/30">
-                      {selectedPedreiro.pagamentos.map((p) => (
-                        <div key={p.id} className="p-3 bg-[#13171F] flex items-center justify-between text-xs hover:bg-[#161B26] transition-colors">
-                          <div className="space-y-0.5">
-                            <span className="font-mono font-bold text-emerald-400">
-                              R$ {p.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </span>
-                            <div className="flex items-center gap-1 text-[10px] text-[#9BA1B1]">
-                              <Calendar className="w-3 h-3 text-[#9BA1B1]" />
-                              <span>{new Date(p.data).toLocaleDateString('pt-BR')}</span>
+                      {selectedPedreiro.pagamentos.map((p) => {
+                        const isVale = p.tipo === 'vale';
+                        return (
+                          <div key={p.id} className="p-3 bg-[#13171F] flex items-center justify-between text-xs hover:bg-[#161B26] transition-colors">
+                            <div className="space-y-0.5 max-w-[80%]">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`font-mono font-bold ${isVale ? 'text-emerald-400' : 'text-amber-500'}`}>
+                                  R$ {p.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </span>
+                                <span className={`px-1.5 py-0.2 text-[8px] font-bold rounded uppercase ${
+                                  isVale ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/10' : 'bg-amber-500/10 text-amber-500 border border-amber-500/10'
+                                }`}>
+                                  {isVale ? 'Vale' : 'Efetivo'}
+                                </span>
+                              </div>
+                              {p.observacao && (
+                                <p className="text-[10px] text-[#E4E6EB]/80 italic break-words">
+                                  "{p.observacao}"
+                                </p>
+                              )}
+                              <div className="flex items-center gap-1 text-[9px] text-[#9BA1B1]">
+                                <Calendar className="w-3 h-3 text-[#9BA1B1]" />
+                                <span>{new Date(p.data).toLocaleDateString('pt-BR')}</span>
+                              </div>
                             </div>
+                            
+                            <button
+                              onClick={() => handleDeleteVale(selectedPedreiro.id, p.id)}
+                              className="p-1.5 text-[#9BA1B1] hover:text-rose-500 hover:bg-rose-500/10 rounded transition-all cursor-pointer shrink-0"
+                              title="Excluir lançamento"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
-                          
-                          <button
-                            onClick={() => handleDeleteVale(selectedPedreiro.id, p.id)}
-                            className="p-1.5 text-[#9BA1B1] hover:text-rose-500 hover:bg-rose-500/10 rounded transition-all cursor-pointer"
-                            title="Excluir vale"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="text-center py-6 bg-[#13171F] rounded-xl border border-dashed border-[#2D323D]/50 text-[#9BA1B1] text-xs">
-                      Nenhum vale registrado para este pedreiro.
+                      Nenhum pagamento ou vale registrado para este pedreiro.
                     </div>
                   )}
                 </div>
@@ -772,7 +899,7 @@ export default function MaoObraView({
               <div className="text-center py-8 bg-[#13171F]/50 rounded-xl border border-[#2D323D]/40 text-[#9BA1B1] text-xs flex flex-col items-center justify-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-amber-500/80" />
                 <span>Nenhum pedreiro selecionado.</span>
-                <span className="text-[10px] text-[#9BA1B1]/60">Cadastre ou selecione um pedreiro ao lado para registrar vales e ver o histórico de pagamentos.</span>
+                <span className="text-[10px] text-[#9BA1B1]/60">Cadastre ou selecione um pedreiro ao lado para registrar pagamentos e ver o histórico.</span>
               </div>
             )}
 

@@ -11,7 +11,9 @@ import {
   ArrowDownRight, 
   ShoppingBag, 
   Briefcase, 
-  Coins 
+  Coins,
+  Download,
+  Loader2
 } from 'lucide-react';
 import { Obra, Entrada, Saida, MaoObra, Material } from '../types';
 
@@ -46,35 +48,47 @@ export default function ReportModal({
   });
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [copied, setCopied] = useState(false);
-
-  if (!isOpen) return null;
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   // Helper: Date range calculation based on selection
   const resolvedRange = useMemo(() => {
     let start = '';
     let end = '';
 
-    if (periodType === 'diário') {
-      start = singleDate;
-      end = singleDate;
-    } else if (periodType === 'semanal') {
-      // Last 7 days from endDate
-      const endD = new Date(endDate);
-      const startD = new Date(endDate);
-      startD.setDate(endD.getDate() - 6);
-      start = startD.toISOString().split('T')[0];
-      end = endDate;
-    } else if (periodType === 'mensal') {
-      // Full selected month
-      const [year, month] = selectedMonth.split('-');
-      start = `${year}-${month}-01`;
-      // Find last day of month
-      const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
-      const lastDayStr = lastDay < 10 ? `0${lastDay}` : `${lastDay}`;
-      end = `${year}-${month}-${lastDayStr}`;
-    } else {
-      start = startDate;
-      end = endDate;
+    try {
+      if (periodType === 'diário') {
+        start = singleDate || '';
+        end = singleDate || '';
+      } else if (periodType === 'semanal') {
+        const baseDateStr = endDate || new Date().toISOString().split('T')[0];
+        const endD = new Date(baseDateStr);
+        const startD = new Date(baseDateStr);
+        if (!isNaN(endD.getTime())) {
+          startD.setDate(endD.getDate() - 6);
+          start = startD.toISOString().split('T')[0];
+          end = baseDateStr;
+        } else {
+          start = baseDateStr;
+          end = baseDateStr;
+        }
+      } else if (periodType === 'mensal') {
+        const baseMonthStr = selectedMonth || new Date().toISOString().slice(0, 7);
+        const parts = baseMonthStr.split('-');
+        const year = parts[0] || new Date().getFullYear().toString();
+        const month = parts[1] || (new Date().getMonth() + 1).toString().padStart(2, '0');
+        start = `${year}-${month}-01`;
+        const lastDayDate = new Date(parseInt(year), parseInt(month), 0);
+        const lastDay = isNaN(lastDayDate.getTime()) ? 30 : lastDayDate.getDate();
+        const lastDayStr = lastDay < 10 ? `0${lastDay}` : `${lastDay}`;
+        end = `${year}-${month}-${lastDayStr}`;
+      } else {
+        start = startDate || '';
+        end = endDate || '';
+      }
+    } catch (e) {
+      console.error("Error calculating resolved range:", e);
+      start = new Date().toISOString().split('T')[0];
+      end = new Date().toISOString().split('T')[0];
     }
 
     return { start, end };
@@ -82,23 +96,22 @@ export default function ReportModal({
 
   // Helper to verify if a date is within selected range
   const isWithinRange = (dateStr: string) => {
-    if (!dateStr) return false;
-    // Normalize format
+    if (!dateStr || typeof dateStr !== 'string') return false;
     const formattedDate = dateStr.slice(0, 10);
     return formattedDate >= resolvedRange.start && formattedDate <= resolvedRange.end;
   };
 
   // Filter Data
   const filteredEntradas = useMemo(() => {
-    return entradas.filter(e => isWithinRange(e.data));
+    return (entradas || []).filter(e => e && isWithinRange(e.data));
   }, [entradas, resolvedRange]);
 
   const filteredSaidas = useMemo(() => {
-    return saidas.filter(s => isWithinRange(s.data));
+    return (saidas || []).filter(s => s && isWithinRange(s.data));
   }, [saidas, resolvedRange]);
 
   const filteredMateriais = useMemo(() => {
-    return materiais.filter(m => isWithinRange(m.dataCompra));
+    return (materiais || []).filter(m => m && isWithinRange(m.dataCompra));
   }, [materiais, resolvedRange]);
 
   // Filter Labor (Mão de Obra) Payments
@@ -106,15 +119,18 @@ export default function ReportModal({
   const filteredMaoObraList = useMemo(() => {
     const list: { profissional: string; funcao: string; valor: number; data: string; descricao: string; tipo: string }[] = [];
     
+    if (!Array.isArray(maoObra)) return list;
+
     maoObra.forEach(m => {
-      const pagamentos = m.pagamentos || [];
-      if (pagamentos.length > 0) {
+      if (!m) return;
+      const pagamentos = m.pagamentos;
+      if (Array.isArray(pagamentos) && pagamentos.length > 0) {
         pagamentos.forEach(p => {
-          if (isWithinRange(p.data)) {
+          if (p && p.data && isWithinRange(p.data)) {
             list.push({
-              profissional: m.nome,
-              funcao: m.funcao,
-              valor: p.valor,
+              profissional: m.nome || 'Profissional',
+              funcao: m.funcao || 'Mão de Obra',
+              valor: Number(p.valor) || 0,
               data: p.data,
               descricao: p.observacao || (p.tipo === 'vale' ? 'Vale / Adiantamento' : 'Pagamento Efetivo'),
               tipo: p.tipo || 'final'
@@ -122,11 +138,11 @@ export default function ReportModal({
           }
         });
       } else {
-        if (isWithinRange(m.dataPagamento)) {
+        if (m.dataPagamento && isWithinRange(m.dataPagamento)) {
           list.push({
-            profissional: m.nome,
-            funcao: m.funcao,
-            valor: m.valor || m.valorContrato || 0,
+            profissional: m.nome || 'Profissional',
+            funcao: m.funcao || 'Mão de Obra',
+            valor: Number(m.valor || m.valorContrato || 0),
             data: m.dataPagamento,
             descricao: m.observacao || 'Pagamento total contrato',
             tipo: 'final'
@@ -135,8 +151,20 @@ export default function ReportModal({
       }
     });
 
-    return list.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+    return list.sort((a, b) => {
+      const timeA = a.data ? new Date(a.data).getTime() : 0;
+      const timeB = b.data ? new Date(b.data).getTime() : 0;
+      return (Number.isNaN(timeB) ? 0 : timeB) - (Number.isNaN(timeA) ? 0 : timeA);
+    });
   }, [maoObra, resolvedRange]);
+
+  const filteredVales = useMemo(() => {
+    return filteredMaoObraList.filter(l => l.tipo === 'vale');
+  }, [filteredMaoObraList]);
+
+  const totalValesConcedidos = useMemo(() => {
+    return filteredVales.reduce((sum, v) => sum + v.valor, 0);
+  }, [filteredVales]);
 
   // General Labor (Mão de Obra) Metrics
   const laborMetrics = useMemo(() => {
@@ -144,23 +172,32 @@ export default function ReportModal({
     let totalValesConcedidosMaoObra = 0;
     let totalEfetivoPagoMaoObra = 0;
 
-    maoObra.forEach(m => {
-      const vContrato = m.valorContrato || m.valor || 0;
-      totalOrcadoMaoObra += vContrato;
+    if (Array.isArray(maoObra)) {
+      maoObra.forEach(m => {
+        if (!m) return;
+        const vContrato = Number(m.valorContrato || m.valor || 0);
+        totalOrcadoMaoObra += vContrato;
 
-      const pagamentos = m.pagamentos || [];
-      if (pagamentos.length > 0) {
-        pagamentos.forEach(p => {
-          if (p.tipo === 'vale') {
-            totalValesConcedidosMaoObra += p.valor;
-          } else {
-            totalEfetivoPagoMaoObra += p.valor;
+        const pagamentos = m.pagamentos;
+        if (Array.isArray(pagamentos) && pagamentos.length > 0) {
+          pagamentos.forEach(p => {
+            if (p) {
+              const v = Number(p.valor || 0);
+              if (p.tipo === 'vale') {
+                totalValesConcedidosMaoObra += v;
+              } else {
+                totalEfetivoPagoMaoObra += v;
+              }
+            }
+          });
+        } else {
+          const v = Number(m.valor || 0);
+          if (v > 0) {
+            totalEfetivoPagoMaoObra += v;
           }
-        });
-      } else if (m.valor > 0) {
-        totalEfetivoPagoMaoObra += m.valor;
-      }
-    });
+        }
+      });
+    }
 
     const totalRestantePagarMaoObra = Math.max(0, totalOrcadoMaoObra - totalValesConcedidosMaoObra - totalEfetivoPagoMaoObra);
 
@@ -214,8 +251,10 @@ export default function ReportModal({
 
   // Format date helper
   const formatDateBR = (dateStr: string) => {
-    if (!dateStr) return '';
-    const [year, month, day] = dateStr.slice(0, 10).split('-');
+    if (!dateStr || typeof dateStr !== 'string') return '';
+    const parts = dateStr.slice(0, 10).split('-');
+    if (parts.length < 3) return dateStr;
+    const [year, month, day] = parts;
     return `${day}/${month}/${year}`;
   };
 
@@ -315,6 +354,251 @@ export default function ReportModal({
   const handlePrint = () => {
     window.print();
   };
+
+  // Helper to load html2pdf from CDN dynamically
+  const loadHtml2Pdf = () => {
+    return new Promise<any>((resolve, reject) => {
+      if ((window as any).html2pdf) {
+        resolve((window as any).html2pdf);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+      script.async = true;
+      script.onload = () => {
+        if ((window as any).html2pdf) {
+          resolve((window as any).html2pdf);
+        } else {
+          reject(new Error('html2pdf not found on window object'));
+        }
+      };
+      script.onerror = () => reject(new Error('Failed to load html2pdf script'));
+      document.body.appendChild(script);
+    });
+  };
+
+  const preprocessColorsForHtml2Canvas = (element: HTMLElement) => {
+    const colorMap: { [key: string]: { prop: string, value: string } } = {
+      'text-slate-950': { prop: 'color', value: '#020617' },
+      'text-slate-900': { prop: 'color', value: '#0f172a' },
+      'text-slate-800': { prop: 'color', value: '#1e293b' },
+      'text-slate-700': { prop: 'color', value: '#334155' },
+      'text-slate-600': { prop: 'color', value: '#475569' },
+      'text-slate-500': { prop: 'color', value: '#64748b' },
+      'text-slate-400': { prop: 'color', value: '#94a3b8' },
+      'text-slate-300': { prop: 'color', value: '#cbd5e1' },
+      'text-emerald-600': { prop: 'color', value: '#16a34a' },
+      'text-rose-600': { prop: 'color', value: '#dc2626' },
+      'text-amber-600': { prop: 'color', value: '#d97706' },
+      'bg-white': { prop: 'backgroundColor', value: '#ffffff' },
+      'bg-slate-50': { prop: 'backgroundColor', value: '#f8fafc' },
+      'bg-emerald-50': { prop: 'backgroundColor', value: '#f0fdf4' },
+      'bg-rose-50': { prop: 'backgroundColor', value: '#fef2f2' },
+      'bg-amber-50': { prop: 'backgroundColor', value: '#fef3c7' },
+      'border-slate-200': { prop: 'borderColor', value: '#e2e8f0' },
+      'border-slate-100': { prop: 'borderColor', value: '#f1f5f9' },
+    };
+
+    const traverse = (node: HTMLElement) => {
+      const classes = Array.from(node.classList);
+      classes.forEach(cls => {
+        if (colorMap[cls]) {
+          const { prop, value } = colorMap[cls];
+          node.style[prop as any] = value;
+          node.classList.remove(cls);
+        }
+        if (cls === 'divide-slate-100' || cls === 'divide-slate-200') {
+          node.classList.remove(cls);
+        }
+      });
+
+      node.style.fontFamily = 'Inter, system-ui, -apple-system, sans-serif';
+
+      if (node.tagName === 'TD' || node.tagName === 'TH') {
+        node.style.borderBottom = '1px solid #f1f5f9';
+        node.style.padding = '8px';
+      }
+      if (node.tagName === 'TH') {
+        node.style.borderBottom = '2px solid #e2e8f0';
+        node.style.fontWeight = 'bold';
+        node.style.color = '#475569';
+        node.style.backgroundColor = '#f8fafc';
+      }
+
+      Array.from(node.children).forEach(child => traverse(child as HTMLElement));
+    };
+
+    traverse(element);
+  };
+
+  const replaceOklch = (str: string): string => {
+    let result = '';
+    let i = 0;
+    while (i < str.length) {
+      if (str.substring(i, i + 6) === 'oklch(') {
+        let depth = 1;
+        let j = i + 6;
+        while (j < str.length && depth > 0) {
+          if (str[j] === '(') depth++;
+          else if (str[j] === ')') depth--;
+          j++;
+        }
+        result += 'rgb(120, 120, 120)';
+        i = j;
+      } else {
+        result += str[i];
+        i++;
+      }
+    }
+    return result;
+  };
+
+  const handleDownloadPDF = async () => {
+    const element = document.getElementById('printable-report-area');
+    if (!element) return;
+
+    setIsGeneratingPDF(true);
+
+    const styleElements = Array.from(document.querySelectorAll('style'));
+    const originalContents = styleElements.map(style => style.textContent || '');
+    const originalGetComputedStyle = window.getComputedStyle;
+    const restoredRules: { sheet: CSSStyleSheet; index: number; originalText: string }[] = [];
+
+    try {
+      // Temporarily replace oklch color values in standard style tags to prevent html2canvas color parser crash
+      styleElements.forEach(style => {
+        if (style.textContent) {
+          style.textContent = replaceOklch(style.textContent);
+        }
+      });
+
+      // Temporarily clean oklch from all CSSOM stylesheets
+      for (let i = 0; i < document.styleSheets.length; i++) {
+        const sheet = document.styleSheets[i];
+        try {
+          if (!sheet.cssRules) continue;
+          for (let j = 0; j < sheet.cssRules.length; j++) {
+            const rule = sheet.cssRules[j];
+            if (rule.cssText && rule.cssText.includes('oklch')) {
+              restoredRules.push({
+                sheet,
+                index: j,
+                originalText: rule.cssText
+              });
+              const cleanText = replaceOklch(rule.cssText);
+              sheet.deleteRule(j);
+              sheet.insertRule(cleanText, j);
+            }
+          }
+        } catch (e) {
+          // Ignore cross-origin stylesheet errors
+        }
+      }
+
+      // Intercept window.getComputedStyle to return safe color fallbacks instead of oklch
+      window.getComputedStyle = function (elt, pseudoElt) {
+        const style = originalGetComputedStyle(elt, pseudoElt);
+        return new Proxy(style, {
+          get(target, prop) {
+            if (prop === 'getPropertyValue') {
+              return function (propertyName: string) {
+                const value = target.getPropertyValue(propertyName);
+                if (typeof value === 'string' && value.includes('oklch')) {
+                  return replaceOklch(value);
+                }
+                return value;
+              };
+            }
+            const val = Reflect.get(target, prop);
+            if (typeof val === 'string' && val.includes('oklch')) {
+              return replaceOklch(val);
+            }
+            if (typeof val === 'function') {
+              return val.bind(target);
+            }
+            return val;
+          }
+        }) as any;
+      };
+
+      const html2pdf = await loadHtml2Pdf();
+
+      // Create a clone to strip out dark mode styles
+      const clone = element.cloneNode(true) as HTMLElement;
+
+      // Recursively strip out classes starting with "dark:"
+      const allElements = clone.querySelectorAll('*');
+      allElements.forEach((el) => {
+        const classesToRemove: string[] = [];
+        el.classList.forEach((cls) => {
+          if (cls.startsWith('dark:')) {
+            classesToRemove.push(cls);
+          }
+        });
+        classesToRemove.forEach((cls) => el.classList.remove(cls));
+      });
+
+      // Also strip dark classes from clone itself
+      const cloneClassesToRemove: string[] = [];
+      clone.classList.forEach((cls) => {
+        if (cls.startsWith('dark:')) {
+          cloneClassesToRemove.push(cls);
+        }
+      });
+      cloneClassesToRemove.forEach((cls) => clone.classList.remove(cls));
+
+      // Force clean, high-contrast style overrides on elements
+      preprocessColorsForHtml2Canvas(clone);
+
+      clone.style.backgroundColor = '#ffffff';
+      clone.style.color = '#0f172a'; // slate-900
+      clone.style.padding = '20px';
+      clone.style.borderRadius = '0px';
+      clone.style.border = 'none';
+      clone.style.boxShadow = 'none';
+
+      // Set standard print styles
+      const opt = {
+        margin: [10, 10, 10, 10],
+        filename: `Relatorio_Obra_${(obra.nome || 'Obra').replace(/\s+/g, '_')}_${resolvedRange.start}_a_${resolvedRange.end}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { 
+          scale: 2, 
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          letterRendering: true
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      // Generate the PDF
+      await html2pdf().set(opt).from(clone).save();
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Ocorreu um erro ao gerar o PDF. Por favor, tente novamente ou use a opção de Imprimir.');
+    } finally {
+      // Restore window.getComputedStyle
+      window.getComputedStyle = originalGetComputedStyle;
+
+      // Restore CSSOM stylesheet rules
+      restoredRules.forEach(({ sheet, index, originalText }) => {
+        try {
+          sheet.deleteRule(index);
+          sheet.insertRule(originalText, index);
+        } catch (e) {
+          // Ignore restore errors
+        }
+      });
+
+      // Restore original style tags' content
+      styleElements.forEach((style, index) => {
+        style.textContent = originalContents[index];
+      });
+      setIsGeneratingPDF(false);
+    }
+  };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn print:absolute print:inset-0 print:bg-white print:p-0">
@@ -437,11 +721,23 @@ export default function ReportModal({
               <span>{copied ? 'Copiado!' : 'Copiar Texto'}</span>
             </button>
             <button
+              onClick={handleDownloadPDF}
+              disabled={isGeneratingPDF}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 transition-all cursor-pointer shadow"
+            >
+              {isGeneratingPDF ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
+              <span>{isGeneratingPDF ? 'Gerando PDF...' : 'Gerar PDF'}</span>
+            </button>
+            <button
               onClick={handlePrint}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F27D26] text-white rounded-xl text-xs font-semibold hover:bg-[#ff8c3a] transition-all cursor-pointer shadow"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Imprimir / PDF</span>
+              <span>Imprimir</span>
             </button>
           </div>
         </div>
@@ -450,29 +746,29 @@ export default function ReportModal({
         <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-slate-50 dark:bg-[#0F1115] text-slate-800 dark:text-[#E4E6EB] print:bg-white print:text-black print:overflow-visible print:p-0">
           
           {/* Printable Container wrapper */}
-          <div className="max-w-3xl mx-auto bg-white dark:bg-[#16191F] border border-slate-200/60 dark:border-[#2D323D] rounded-2xl p-8 space-y-8 shadow-sm print:border-none print:shadow-none print:p-0">
+          <div id="printable-report-area" className="max-w-3xl mx-auto bg-white text-slate-800 border border-slate-200 rounded-2xl p-8 space-y-8 shadow-md print:border-none print:shadow-none print:p-0 font-sans">
             
             {/* Report Letterhead / Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start pb-6 border-b border-slate-100 dark:border-[#2D323D] gap-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start pb-6 border-b border-slate-200 gap-4">
               <div>
-                <div className="flex items-center gap-2 text-slate-800 dark:text-white print:text-black">
+                <div className="flex items-center gap-2 text-slate-800 print:text-black">
                   <div className="bg-[#F27D26] p-1.5 rounded-lg text-white print:bg-transparent print:text-black print:p-0">
                     <FileText className="w-6 h-6" />
                   </div>
-                  <span className="text-lg font-bold tracking-tight">OBRACONTROL</span>
+                  <span className="text-lg font-bold tracking-tight text-slate-900">OBRACONTROL</span>
                 </div>
-                <p className="text-[10px] text-slate-400 dark:text-[#9BA1B1] font-mono tracking-wider mt-1 uppercase print:text-gray-500">
+                <p className="text-[10px] text-slate-400 font-mono tracking-wider mt-1 uppercase">
                   Sistema de Gestão Financeira Integrada
                 </p>
               </div>
 
               <div className="text-left sm:text-right font-sans">
-                <h4 className="text-base font-bold text-[#F27D26] print:text-black">Relatório Consolidado</h4>
-                <div className="text-xs text-slate-500 dark:text-[#9BA1B1] mt-1 space-y-0.5 print:text-gray-600">
-                  <p className="font-semibold text-slate-700 dark:text-[#E4E6EB] print:text-black">Obra: {obra.nome}</p>
+                <h4 className="text-base font-bold text-[#F27D26] print:text-black">Relatório de Fluxo Financeiro</h4>
+                <div className="text-xs text-slate-500 mt-1 space-y-0.5">
+                  <p className="font-semibold text-slate-700">Obra: {obra.nome}</p>
                   <p>Cliente: {obra.cliente}</p>
                   <p className="text-[10px]">
-                    Período: <strong className="text-slate-700 dark:text-white print:text-black">
+                    Período: <strong className="text-slate-700">
                       {formatDateBR(resolvedRange.start)} a {formatDateBR(resolvedRange.end)}
                     </strong>
                   </p>
@@ -483,286 +779,284 @@ export default function ReportModal({
               </div>
             </div>
 
-            {/* Inflow/Outflow Key KPI Blocks */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/10 border border-emerald-200/50 dark:border-emerald-800/20 rounded-xl print:border-gray-200">
-                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase tracking-wider font-bold block mb-1">
-                  Total Entradas (Aportes)
-                </span>
-                <span className="text-xl font-bold text-emerald-700 dark:text-emerald-400 font-mono">
-                  R$ {totalInflows.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </span>
-                <span className="text-[10px] text-slate-400 block mt-1">
-                  {filteredEntradas.length} lançamentos de entrada
-                </span>
-              </div>
-
-              <div className="p-4 bg-rose-50 dark:bg-rose-950/10 border border-rose-200/50 dark:border-rose-800/20 rounded-xl print:border-gray-200">
-                <span className="text-[10px] text-rose-600 dark:text-rose-400 uppercase tracking-wider font-bold block mb-1">
-                  Total Saídas (Despesas)
-                </span>
-                <span className="text-xl font-bold text-rose-700 dark:text-rose-400 font-mono">
-                  R$ {totalOutflows.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </span>
-                <span className="text-[10px] text-slate-400 block mt-1">
-                  {filteredSaidas.length} transações liquidadas
-                </span>
-              </div>
-
-              <div className={`p-4 border rounded-xl print:border-gray-200 ${
-                periodBalance >= 0 
-                  ? 'bg-blue-50 dark:bg-blue-950/10 border-blue-200/50 dark:border-blue-800/20' 
-                  : 'bg-amber-50 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-800/20'
-              }`}>
-                <span className={`text-[10px] uppercase tracking-wider font-bold block mb-1 ${
-                  periodBalance >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-amber-600 dark:text-amber-400'
-                }`}>
-                  Saldo do Período
-                </span>
-                <span className={`text-xl font-bold font-mono ${
-                  periodBalance >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-amber-700 dark:text-amber-400'
-                }`}>
-                  R$ {periodBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </span>
-                <span className="text-[10px] text-slate-400 block mt-1">
-                  Balanço líquido das movimentações
-                </span>
+            {/* SEÇÃO 1: FLUXO DE CAIXA */}
+            <div>
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 pb-1 border-b border-slate-200 flex items-center gap-1.5">
+                <Coins className="w-4 h-4 text-[#F27D26]" />
+                1. Fluxo de Caixa do Período
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-slate-500 font-bold">
+                      <th className="py-2">Item</th>
+                      <th className="py-2 text-right">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    <tr>
+                      <td className="py-2.5 text-slate-600 font-medium">Saldo Inicial</td>
+                      <td className="py-2.5 text-right font-mono text-slate-900">
+                        R$ {(obra.saldoInicial || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 text-emerald-600 font-medium">(+) Entradas de Dinheiro (Aportes)</td>
+                      <td className="py-2.5 text-right font-mono font-semibold text-emerald-600">
+                        + R$ {totalInflows.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 text-rose-600 font-medium">(-) Saídas de Dinheiro (Despesas / Pagamentos)</td>
+                      <td className="py-2.5 text-right font-mono font-semibold text-rose-600">
+                        - R$ {totalOutflows.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    <tr className="bg-slate-50 font-bold border-t-2 border-slate-200">
+                      <td className="py-2.5 text-slate-800">Saldo Final do Caixa</td>
+                      <td className="py-2.5 text-right font-mono text-base text-slate-950">
+                        R$ {((obra.saldoInicial || 0) + totalInflows - totalOutflows).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
 
-            {/* Expense Breakdown by Category */}
+            {/* SEÇÃO 2: COMPRAS DE MATERIAIS */}
             <div>
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 pb-1 border-b border-slate-100 dark:border-[#2D323D]">
-                Resumo de Despesas por Categoria
-              </h4>
-              {categoryBreakdown.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Category cards */}
-                  <div className="space-y-3">
-                    {categoryBreakdown.map((cat, idx) => {
-                      const pct = totalOutflows > 0 ? (cat.value / totalOutflows) * 100 : 0;
-                      return (
-                        <div key={cat.name} className="space-y-1">
-                          <div className="flex justify-between text-xs">
-                            <span className="font-semibold text-slate-700 dark:text-slate-300 print:text-black">{cat.name}</span>
-                            <span className="font-mono text-slate-500 font-bold">
-                              R$ {cat.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ({Math.round(pct)}%)
-                            </span>
-                          </div>
-                          <div className="w-full bg-slate-100 dark:bg-[#0F1115] h-2 rounded-full overflow-hidden print:border print:border-gray-200">
-                            <div 
-                              className="bg-[#F27D26] h-full rounded-full" 
-                              style={{ width: `${pct}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Summary commentary box */}
-                  <div className="p-4 bg-slate-50 dark:bg-[#0F1115] rounded-xl border border-slate-100 dark:border-[#2D323D] flex flex-col justify-between print:bg-white print:border-gray-200">
-                    <div className="text-xs space-y-2">
-                      <p className="font-bold text-slate-700 dark:text-slate-300">Análise de Alocação:</p>
-                      <p className="text-slate-500 dark:text-[#9BA1B1] leading-relaxed">
-                        Os maiores centros de custos registrados no período foram de <strong className="text-slate-700 dark:text-white print:text-black">{categoryBreakdown[0]?.name || 'N/A'}</strong> (R$ {categoryBreakdown[0]?.value.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}).
-                      </p>
-                    </div>
-                    <div className="text-[10px] text-slate-400 dark:text-slate-500 italic mt-3">
-                      * Certifique-se de vincular notas fiscais e recibos para auditoria de obra.
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-4 text-xs text-slate-400">
-                  Nenhuma despesa para exibir no breakdown do período.
-                </div>
-              )}
-            </div>
-
-            {/* Materials Purchases Table Summary */}
-            <div>
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 pb-1 border-b border-slate-100 dark:border-[#2D323D] flex items-center gap-1.5">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 pb-1 border-b border-slate-200 flex items-center gap-1.5">
                 <ShoppingBag className="w-4 h-4 text-[#F27D26]" />
-                Compras de Materiais no Período
-              </h4>
+                2. Compras de Materiais
+              </h3>
               {filteredMateriais.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="border-b border-slate-100 dark:border-[#2D323D] text-slate-400 font-bold">
+                      <tr className="border-b border-slate-200 text-slate-500 font-bold">
                         <th className="py-2">Data</th>
-                        <th className="py-2">Material</th>
+                        <th className="py-2">Descrição do Material</th>
                         <th className="py-2">Fornecedor</th>
-                        <th className="py-2 text-right">Qtd</th>
+                        <th className="py-2 text-center">Quantidade</th>
+                        <th className="py-2 text-right">Valor Unitário</th>
                         <th className="py-2 text-right">Valor Total</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-[#2D323D]/40">
+                    <tbody className="divide-y divide-slate-100">
                       {filteredMateriais.map((m) => (
-                        <tr key={m.id} className="text-slate-600 dark:text-slate-300 print:text-black">
+                        <tr key={m.id} className="text-slate-700">
                           <td className="py-2 font-mono text-[11px]">{formatDateBR(m.dataCompra)}</td>
-                          <td className="py-2 font-semibold">
-                            {m.nome}
-                            {m.categoria && <span className="block text-[9px] text-slate-400 font-normal">{m.categoria}</span>}
+                          <td className="py-2">
+                            <p className="font-semibold">{m.nome}</p>
+                            {m.descricao && <p className="text-[10px] text-slate-400 font-normal">{m.descricao}</p>}
                           </td>
-                          <td className="py-2 text-slate-500">{m.loja}</td>
-                          <td className="py-2 text-right">{m.quantidade} {m.unidade}</td>
-                          <td className="py-2 text-right font-mono font-bold">
-                            R$ {m.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          <td className="py-2 text-slate-500">{m.loja || '-'}</td>
+                          <td className="py-2 text-center">{m.quantidade} {m.unidade}</td>
+                          <td className="py-2 text-right font-mono">
+                            R$ {(m.valorUnitario || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-2 text-right font-mono font-semibold text-slate-950">
+                            R$ {(m.valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
                         </tr>
                       ))}
+                      <tr className="bg-slate-50 font-bold border-t-2 border-slate-200">
+                        <td colSpan={5} className="py-2.5 text-slate-800 text-right">Total gasto com compras de materiais:</td>
+                        <td className="py-2.5 text-right font-mono text-slate-950">
+                          R$ {totalMaterialsCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
               ) : (
-                <div className="text-center py-4 text-xs text-slate-400">
-                  Nenhuma compra de material registrada nas datas selecionadas.
+                <div className="text-center py-4 text-xs text-slate-400 italic bg-slate-50 rounded-lg border border-slate-100">
+                  Nenhuma compra de material registrada no período.
                 </div>
               )}
             </div>
 
-            {/* Labor (Mão de Obra) Table Summary */}
-            <div className="space-y-4">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 pb-1 border-b border-slate-100 dark:border-[#2D323D] flex items-center gap-1.5">
-                <Briefcase className="w-4 h-4 text-[#F27D26]" />
-                Gastos com Mão de Obra no Período
-              </h4>
-
-              {/* Labor Consolidated Summary Cards */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-50 dark:bg-[#0F1115]/50 border border-slate-100 dark:border-[#2D323D]/50 rounded-xl">
-                <div>
-                  <span className="text-[9px] text-slate-400 dark:text-[#9BA1B1] uppercase block font-semibold">Orçamento Total</span>
-                  <span className="text-sm font-bold font-mono text-slate-800 dark:text-slate-200 print:text-black">
-                    R$ {laborMetrics.totalOrcadoMaoObra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[9px] text-slate-400 dark:text-[#9BA1B1] uppercase block font-semibold">Vales Concedidos</span>
-                  <span className="text-sm font-bold font-mono text-emerald-500">
-                    R$ {laborMetrics.totalValesConcedidosMaoObra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[9px] text-slate-400 dark:text-[#9BA1B1] uppercase block font-semibold">Efetivamente Pago</span>
-                  <span className="text-sm font-bold font-mono text-amber-500">
-                    R$ {laborMetrics.totalEfetivoPagoMaoObra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[9px] text-slate-400 dark:text-[#9BA1B1] uppercase block font-semibold">Restante a Pagar</span>
-                  <span className="text-sm font-bold font-mono text-[#F27D26]">
-                    R$ {laborMetrics.totalRestantePagarMaoObra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-              </div>
-
-              {filteredMaoObraList.length > 0 ? (
+            {/* SEÇÃO 3: ENTRADAS DE DINHEIRO */}
+            <div>
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 pb-1 border-b border-slate-200 flex items-center gap-1.5">
+                <ArrowUpRight className="w-4 h-4 text-emerald-500" />
+                3. Entradas de Dinheiro
+              </h3>
+              {filteredEntradas.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="border-b border-slate-100 dark:border-[#2D323D] text-slate-400 font-bold">
+                      <tr className="border-b border-slate-200 text-slate-500 font-bold">
                         <th className="py-2">Data</th>
-                        <th className="py-2">Profissional</th>
-                        <th className="py-2">Função</th>
-                        <th className="py-2">Tipo</th>
-                        <th className="py-2">Descrição Lançamento</th>
-                        <th className="py-2 text-right">Valor Pago</th>
+                        <th className="py-2">Descrição</th>
+                        <th className="py-2">Origem / Categoria</th>
+                        <th className="py-2 text-right">Valor</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-[#2D323D]/40">
-                      {filteredMaoObraList.map((l, idx) => {
-                        const isVale = l.tipo === 'vale';
-                        return (
-                          <tr key={idx} className="text-slate-600 dark:text-slate-300 print:text-black">
-                            <td className="py-2 font-mono text-[11px]">{formatDateBR(l.data)}</td>
-                            <td className="py-2 font-semibold">{l.profissional}</td>
-                            <td className="py-2 text-slate-500">{l.funcao}</td>
-                            <td className="py-2">
-                              <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded uppercase ${
-                                isVale ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-500'
-                              }`}>
-                                {isVale ? 'Vale' : 'Efetivo'}
-                              </span>
-                            </td>
-                            <td className="py-2 text-slate-400 text-[11px] max-w-[200px] truncate" title={l.descricao}>
-                              {l.descricao}
-                            </td>
-                            <td className="py-2 text-right font-mono font-bold text-slate-700 dark:text-slate-200 print:text-black">
-                              R$ {l.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </td>
-                          </tr>
-                        );
-                      })}
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredEntradas.map((e) => (
+                        <tr key={e.id} className="text-slate-700">
+                          <td className="py-2 font-mono text-[11px]">{formatDateBR(e.data)}</td>
+                          <td className="py-2 font-semibold">{e.descricao || '-'}</td>
+                          <td className="py-2 text-slate-500">{e.origem || 'Aporte'}</td>
+                          <td className="py-2 text-right font-mono font-semibold text-emerald-600">
+                            + R$ {e.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="bg-slate-50 font-bold border-t-2 border-slate-200">
+                        <td colSpan={3} className="py-2.5 text-slate-800 text-right">Total de entradas de dinheiro:</td>
+                        <td className="py-2.5 text-right font-mono text-emerald-600">
+                          R$ {totalInflows.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
               ) : (
-                <div className="text-center py-4 text-xs text-slate-400">
-                  Nenhum pagamento de mão de obra registrado nas datas selecionadas.
+                <div className="text-center py-4 text-xs text-slate-400 italic bg-slate-50 rounded-lg border border-slate-100">
+                  Nenhuma entrada registrada no período.
                 </div>
               )}
             </div>
 
-            {/* Cash Flow Details (Inflows and Outflows) */}
+            {/* SEÇÃO 4: SAÍDAS DE DINHEIRO */}
             <div>
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 pb-1 border-b border-slate-100 dark:border-[#2D323D] flex items-center gap-1.5">
-                <Coins className="w-4 h-4 text-[#F27D26]" />
-                Entradas e Saídas Detalhadas
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
-                {/* Entradas column */}
-                <div className="space-y-2">
-                  <h5 className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1 mb-2">
-                    <ArrowUpRight className="w-4 h-4" />
-                    Entradas de Caixa
-                  </h5>
-                  {filteredEntradas.length > 0 ? (
-                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1 print:max-h-none print:overflow-visible">
-                      {filteredEntradas.map((e) => (
-                        <div key={e.id} className="p-2.5 bg-slate-50 dark:bg-[#0F1115]/50 border border-slate-100 dark:border-[#2D323D]/45 rounded-lg flex justify-between items-center text-xs print:bg-white print:border-gray-200">
-                          <div className="min-w-0 pr-2">
-                            <p className="font-semibold text-slate-700 dark:text-slate-300 truncate print:text-black">{e.descricao || e.origem}</p>
-                            <span className="text-[9px] font-mono text-slate-400">{formatDateBR(e.data)}</span>
-                          </div>
-                          <span className="font-mono font-bold text-emerald-600 shrink-0">
-                            + R$ {e.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-[11px] text-slate-400 italic">Nenhuma entrada no período.</p>
-                  )}
-                </div>
-
-                {/* Saídas column */}
-                <div className="space-y-2">
-                  <h5 className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider flex items-center gap-1 mb-2">
-                    <ArrowDownRight className="w-4 h-4" />
-                    Saídas de Caixa
-                  </h5>
-                  {filteredSaidas.length > 0 ? (
-                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1 print:max-h-none print:overflow-visible">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 pb-1 border-b border-slate-200 flex items-center gap-1.5">
+                <ArrowDownRight className="w-4 h-4 text-rose-500" />
+                4. Saídas de Dinheiro
+              </h3>
+              {filteredSaidas.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-slate-500 font-bold">
+                        <th className="py-2">Data</th>
+                        <th className="py-2">Descrição</th>
+                        <th className="py-2">Categoria</th>
+                        <th className="py-2 text-right">Valor</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
                       {filteredSaidas.map((s) => (
-                        <div key={s.id} className="p-2.5 bg-slate-50 dark:bg-[#0F1115]/50 border border-slate-100 dark:border-[#2D323D]/45 rounded-lg flex justify-between items-center text-xs print:bg-white print:border-gray-200">
-                          <div className="min-w-0 pr-2">
-                            <p className="font-semibold text-slate-700 dark:text-slate-300 truncate print:text-black">{s.descricao}</p>
-                            <span className="text-[9px] text-slate-400">
-                              {s.categoria} • <span className="font-mono">{formatDateBR(s.data)}</span>
+                        <tr key={s.id} className="text-slate-700">
+                          <td className="py-2 font-mono text-[11px]">{formatDateBR(s.data)}</td>
+                          <td className="py-2 font-semibold">{s.descricao || '-'}</td>
+                          <td className="py-2 text-slate-500">
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full text-[10px]">
+                              {s.categoria}
                             </span>
-                          </div>
-                          <span className="font-mono font-bold text-slate-700 dark:text-slate-200 shrink-0 print:text-black">
+                          </td>
+                          <td className="py-2 text-right font-mono font-semibold text-rose-600">
                             - R$ {s.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
+                          </td>
+                        </tr>
                       ))}
-                    </div>
-                  ) : (
-                    <p className="text-[11px] text-slate-400 italic">Nenhuma saída no período.</p>
-                  )}
+                      <tr className="bg-slate-50 font-bold border-t-2 border-slate-200">
+                        <td colSpan={3} className="py-2.5 text-slate-800 text-right">Total de saídas de dinheiro:</td>
+                        <td className="py-2.5 text-right font-mono text-rose-600">
+                          R$ {totalOutflows.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-4 text-xs text-slate-400 italic bg-slate-50 rounded-lg border border-slate-100">
+                  Nenhuma saída registrada no período.
+                </div>
+              )}
+            </div>
+
+            {/* SEÇÃO 5: VALES DA MÃO DE OBRA */}
+            <div>
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 pb-1 border-b border-slate-200 flex items-center gap-1.5">
+                <Briefcase className="w-4 h-4 text-[#F27D26]" />
+                5. Vales da Mão de Obra
+              </h3>
+              {filteredVales.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-slate-500 font-bold">
+                        <th className="py-2">Data</th>
+                        <th className="py-2">Funcionário / Profissional</th>
+                        <th className="py-2">Descrição / Observação</th>
+                        <th className="py-2 text-right">Valor do Vale</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredVales.map((v, idx) => (
+                        <tr key={idx} className="text-slate-700">
+                          <td className="py-2 font-mono text-[11px]">{formatDateBR(v.data)}</td>
+                          <td className="py-2 font-semibold">
+                            {v.profissional}
+                            <span className="block text-[9px] text-slate-400 font-normal">{v.funcao}</span>
+                          </td>
+                          <td className="py-2 text-slate-500 italic">{v.descricao || 'Vale / Adiantamento'}</td>
+                          <td className="py-2 text-right font-mono font-semibold text-amber-600">
+                            R$ {v.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="bg-slate-50 font-bold border-t-2 border-slate-200">
+                        <td colSpan={3} className="py-2.5 text-slate-800 text-right">Total de vales concedidos:</td>
+                        <td className="py-2.5 text-right font-mono text-amber-600">
+                          R$ {totalValesConcedidos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-4 text-xs text-slate-400 italic bg-slate-50 rounded-lg border border-slate-100">
+                  Nenhum vale registrado para mão de obra no período.
+                </div>
+              )}
+            </div>
+
+            {/* SEÇÃO 6: RESUMO FINANCEIRO (Última Página) */}
+            <div style={{ pageBreakBefore: 'always' }} className="pt-8 border-t-2 border-dashed border-slate-300">
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6">
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 text-center pb-2 border-b border-slate-200">
+                  Resumo Financeiro Consolidado
+                </h3>
+                
+                <div className="space-y-3.5 text-xs">
+                  <div className="flex justify-between items-center py-1.5 border-b border-slate-100">
+                    <span className="text-slate-600 font-medium">Total de Entradas:</span>
+                    <span className="font-mono font-bold text-emerald-600 text-sm">
+                      R$ {totalInflows.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center py-1.5 border-b border-slate-100">
+                    <span className="text-slate-600 font-medium">Total de Saídas:</span>
+                    <span className="font-mono font-bold text-rose-600 text-sm">
+                      R$ {totalOutflows.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center py-1.5 border-b border-slate-100">
+                    <span className="text-slate-600 font-medium">Total gasto com Compras de Materiais:</span>
+                    <span className="font-mono font-semibold text-slate-800 text-sm">
+                      R$ {totalMaterialsCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center py-1.5 border-b border-slate-100">
+                    <span className="text-slate-600 font-medium">Total de Vales Concedidos:</span>
+                    <span className="font-mono font-semibold text-amber-600 text-sm">
+                      R$ {totalValesConcedidos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center pt-4 mt-2 border-t-2 border-slate-300">
+                    <span className="text-slate-900 font-bold text-sm">Saldo Final do Caixa:</span>
+                    <span className="font-mono font-black text-slate-950 text-base">
+                      R$ {((obra.saldoInicial || 0) + totalInflows - totalOutflows).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -772,13 +1066,13 @@ export default function ReportModal({
               <div className="grid grid-cols-2 gap-12 text-center text-xs text-gray-600">
                 <div className="space-y-1">
                   <div className="w-48 border-b border-gray-400 mx-auto h-8"></div>
-                  <p className="font-bold">Responsável Técnico / Engenheiro</p>
-                  <p className="text-[10px]">ObraControl</p>
+                  <p className="font-bold text-slate-700">Responsável Técnico / Engenheiro</p>
+                  <p className="text-[10px] text-slate-400">ObraControl</p>
                 </div>
                 <div className="space-y-1">
                   <div className="w-48 border-b border-gray-400 mx-auto h-8"></div>
-                  <p className="font-bold">Cliente / Proprietário</p>
-                  <p className="text-[10px]">{obra.cliente}</p>
+                  <p className="font-bold text-slate-700">Cliente / Proprietário</p>
+                  <p className="text-[10px] text-slate-400">{obra.cliente}</p>
                 </div>
               </div>
             </div>

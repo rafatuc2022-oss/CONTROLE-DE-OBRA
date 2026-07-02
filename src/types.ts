@@ -85,6 +85,7 @@ export interface ComparacaoPreco {
   id: string;
   usuarioId: string;
   material: string;
+  categoria?: string;
   loja: string;
   valor: number;
   data: string;

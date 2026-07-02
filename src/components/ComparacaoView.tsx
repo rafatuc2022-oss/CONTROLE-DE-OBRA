@@ -20,7 +20,7 @@ import {
   Check,
   TrendingUp
 } from 'lucide-react';
-import { Obra, ComparacaoPreco, UNIDADES } from '../types';
+import { Obra, ComparacaoPreco, UNIDADES, CATEGORIAS_MATERIAIS } from '../types';
 
 interface ComparacaoViewProps {
   obra?: Obra;
@@ -54,7 +54,7 @@ export default function ComparacaoView({
   onDeleteComparacao
 }: ComparacaoViewProps) {
   // Navigation between Individual Quotes & Supplier shopping list simulator
-  const [activeSubTab, setActiveSubTab] = useState<'simulador' | 'individuais'>('simulador');
+  const [activeSubTab, setActiveSubTab] = useState<'individuais' | 'simulador'>('individuais');
 
   // ==========================================
   // STATE & LOGIC: INDIVIDUAL QUOTES (EXISTING)
@@ -62,6 +62,7 @@ export default function ComparacaoView({
   const [showAddForm, setShowAddForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [material, setMaterial] = useState('');
+  const [categoria, setCategoria] = useState('');
   const [loja, setLoja] = useState('');
   const [valor, setValor] = useState('');
   const [data, setData] = useState(new Date().toISOString().split('T')[0]);
@@ -69,6 +70,7 @@ export default function ComparacaoView({
 
   const resetForm = () => {
     setMaterial('');
+    setCategoria('');
     setLoja('');
     setValor('');
     setData(new Date().toISOString().split('T')[0]);
@@ -77,15 +79,16 @@ export default function ComparacaoView({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!material || !loja || !valor || !data) return;
+    if (!material || !loja || !valor || !categoria) return;
 
     setLoading(true);
     try {
       await onAddComparacao({
         material: material.trim(),
+        categoria: categoria,
         loja: loja.trim(),
         valor: Number(valor),
-        data
+        data: new Date().toISOString().split('T')[0]
       });
       resetForm();
     } catch (err) {
@@ -130,7 +133,11 @@ export default function ComparacaoView({
     const result: { [key: string]: ComparacaoPreco[] } = {};
     
     Object.entries(groupedQuotes).forEach(([matName, quotes]) => {
-      if (matName.toLowerCase().includes(query) || quotes.some(q => q.loja.toLowerCase().includes(query))) {
+      if (
+        matName.toLowerCase().includes(query) || 
+        quotes.some(q => q.loja.toLowerCase().includes(query)) ||
+        quotes.some(q => q.categoria?.toLowerCase().includes(query))
+      ) {
         result[matName] = quotes;
       }
     });
@@ -893,10 +900,10 @@ export default function ComparacaoView({
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
                     <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                      Nome do Material (Exato ou similar) *
+                      Nome do Produto *
                     </label>
                     <input
                       type="text"
@@ -910,21 +917,26 @@ export default function ComparacaoView({
 
                   <div>
                     <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                      Fornecedor / Depósito / Loja *
+                      Categoria *
                     </label>
-                    <input
-                      type="text"
+                    <select
                       required
-                      value={loja}
-                      onChange={(e) => setLoja(e.target.value)}
-                      placeholder="Ex: Casa do Construtor Ltda"
+                      value={categoria}
+                      onChange={(e) => setCategoria(e.target.value)}
                       className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
-                    />
+                    >
+                      <option value="">Selecione uma categoria</option>
+                      {CATEGORIAS_MATERIAIS.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
                     <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                      Preço Unitário (R$) *
+                      Preço *
                     </label>
                     <input
                       type="number"
@@ -936,18 +948,17 @@ export default function ComparacaoView({
                       className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
                     />
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-[10px] font-bold text-[#9BA1B1] mb-1.5 uppercase">
-                      Data do Orçamento *
+                      Loja/Fornecedor *
                     </label>
                     <input
-                      type="date"
+                      type="text"
                       required
-                      value={data}
-                      onChange={(e) => setData(e.target.value)}
+                      value={loja}
+                      onChange={(e) => setLoja(e.target.value)}
+                      placeholder="Ex: Casa do Construtor"
                       className="w-full px-3 py-2 bg-[#0F1115] border border-[#2D323D] rounded-lg text-xs text-[#E4E6EB] focus:outline-none focus:border-[#F27D26]"
                     />
                   </div>
@@ -1005,6 +1016,7 @@ export default function ComparacaoView({
                 const maxQuote = quotes[quotes.length - 1];
                 const potentialSavings = quotes.length > 1 ? maxQuote.valor - minQuote.valor : 0;
                 const savingsPercent = quotes.length > 1 ? Math.round((potentialSavings / maxQuote.valor) * 100) : 0;
+                const productCategory = quotes.find(q => q.categoria)?.categoria;
 
                 return (
                   <div 
@@ -1014,9 +1026,14 @@ export default function ComparacaoView({
                     {/* Group Title and Savings alert */}
                     <div className="p-5 border-b border-[#2D323D] bg-[#16191F]/40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                       <div>
-                        <h3 className="text-sm font-bold text-[#E4E6EB] flex items-center gap-2">
+                        <h3 className="text-sm font-bold text-[#E4E6EB] flex flex-wrap items-center gap-2">
                           <Tag className="w-4 h-4 text-[#F27D26]" />
                           {matName}
+                          {productCategory && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#1F2937] text-[#9BA1B1] border border-[#2D323D]">
+                              {productCategory}
+                            </span>
+                          )}
                         </h3>
                         <p className="text-[10px] text-[#9BA1B1] mt-0.5">
                           {quotes.length} cotações salvas para este produto
@@ -1026,7 +1043,7 @@ export default function ComparacaoView({
                       {quotes.length > 1 && potentialSavings > 0 && (
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 rounded-lg text-xs font-semibold">
                           <TrendingDown className="w-3.5 h-3.5" />
-                          <span>Diferença: R$ {potentialSavings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ({savingsPercent}% de economia potencial)</span>
+                          <span>Diferença Máxima: R$ {potentialSavings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ({savingsPercent}% de economia potencial)</span>
                         </div>
                       )}
                     </div>
@@ -1035,6 +1052,8 @@ export default function ComparacaoView({
                     <div className="divide-y divide-[#2D323D]/50">
                       {quotes.map((quote, idx) => {
                         const isCheapest = idx === 0 && quotes.length > 1;
+                        const diffFromCheapest = quote.valor - minQuote.valor;
+
                         return (
                           <div 
                             key={quote.id} 
@@ -1051,8 +1070,8 @@ export default function ComparacaoView({
                                 <Store className="w-4 h-4" />
                               </div>
                               <div>
-                                <p className="text-xs font-semibold text-[#E4E6EB] flex items-center gap-1.5">
-                                  {quote.loja}
+                                <p className="text-xs font-semibold text-[#E4E6EB] flex flex-wrap items-center gap-2">
+                                  <span>{quote.loja}</span>
                                   {isCheapest && (
                                     <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full text-[9px] font-bold uppercase tracking-wider">
                                       <Award className="w-2.5 h-2.5" />
@@ -1068,15 +1087,22 @@ export default function ComparacaoView({
                             </div>
 
                             <div className="flex items-center gap-4">
-                              <span className={`text-sm font-bold font-mono ${
-                                isCheapest ? 'text-emerald-400' : 'text-[#E4E6EB]'
-                              }`}>
-                                R$ {quote.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </span>
+                              <div className="text-right">
+                                <span className={`text-sm font-bold font-mono block ${
+                                  isCheapest ? 'text-emerald-400' : 'text-[#E4E6EB]'
+                                }`}>
+                                  R$ {quote.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </span>
+                                {!isCheapest && quotes.length > 1 && diffFromCheapest > 0 && (
+                                  <span className="text-[10px] text-rose-400 font-medium font-mono block mt-0.5">
+                                    +{diffFromCheapest.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ({Math.round((diffFromCheapest / minQuote.valor) * 100)}% mais caro)
+                                  </span>
+                                )}
+                              </div>
 
                               <button
                                 onClick={() => onDeleteComparacao(quote.id)}
-                                className="p-1.5 text-[#9BA1B1] hover:text-[#ef4444] rounded-lg hover:bg-[#ef4444]/10 transition-all cursor-pointer"
+                                className="p-1.5 text-[#9BA1B1] hover:text-[#ef4444] rounded-lg hover:bg-[#ef4444]/10 transition-all cursor-pointer shrink-0"
                                 title="Excluir cotação"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />

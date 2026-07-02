@@ -143,6 +143,85 @@ export default function App() {
   // Active Selected Project object
   const activeObra = obras.find(o => o.id === selectedObraId) || null;
 
+  // --- Wrappers with Confirmations for Edit and Delete Actions ---
+  const handleUpdateObra = async (id: string, updatedFields: any) => {
+    if (window.confirm('Deseja confirmar a edição deste projeto?')) {
+      return updateObra(id, updatedFields);
+    }
+  };
+
+  const handleDeleteObra = async (id: string) => {
+    if (window.confirm('Tem certeza de que deseja excluir permanentemente este projeto/obra? Todos os dados vinculados a ele serão perdidos. Esta ação não pode ser desfeita!')) {
+      return deleteObra(id);
+    }
+  };
+
+  const handleUpdateEntrada = async (id: string, updatedFields: any) => {
+    if (window.confirm('Deseja confirmar a edição desta entrada financeira?')) {
+      return updateEntrada(id, updatedFields);
+    }
+  };
+
+  const handleDeleteEntrada = async (record: any) => {
+    if (window.confirm('Tem certeza de que deseja excluir esta entrada financeira?')) {
+      return deleteEntrada(record);
+    }
+  };
+
+  const handleUpdateSaida = async (id: string, updatedFields: any) => {
+    if (window.confirm('Deseja confirmar a edição desta saída/despesa financeira?')) {
+      return updateSaida(id, updatedFields);
+    }
+  };
+
+  const handleDeleteSaida = async (record: any) => {
+    if (window.confirm('Tem certeza de que deseja excluir esta despesa financeira?')) {
+      return deleteSaida(record);
+    }
+  };
+
+  const handleUpdateMaterial = async (id: string, updatedFields: any, originalRecord: any) => {
+    if (window.confirm('Deseja confirmar a edição deste material?')) {
+      return updateMaterial(id, updatedFields, originalRecord);
+    }
+  };
+
+  const handleDeleteMaterial = async (record: any) => {
+    if (window.confirm('Tem certeza de que deseja excluir este material? Isso também removerá automaticamente o registro de despesa financeira correspondente.')) {
+      return deleteMaterial(record);
+    }
+  };
+
+  const handleUpdateMaoObra = async (id: string, updatedFields: any, originalRecord: any) => {
+    if (window.confirm('Deseja confirmar a edição deste profissional/mão de obra?')) {
+      return updateMaoObra(id, updatedFields, originalRecord);
+    }
+  };
+
+  const handleDeleteMaoObra = async (record: any) => {
+    if (window.confirm('Tem certeza de que deseja excluir este profissional/colaborador? Todos os pagamentos e vales registrados para ele serão excluídos permanentemente.')) {
+      return deleteMaoObra(record);
+    }
+  };
+
+  const handleDeleteMaoObraVale = async (maoObraId: string, paymentId: string) => {
+    if (window.confirm('Tem certeza de que deseja excluir este lançamento de vale/pagamento?')) {
+      return deleteMaoObraVale(maoObraId, paymentId);
+    }
+  };
+
+  const handleUpdateMaoObraVale = async (maoObraId: string, paymentId: string, updatedFields: any) => {
+    if (window.confirm('Deseja confirmar a edição deste lançamento de vale/pagamento?')) {
+      return updateMaoObraVale(maoObraId, paymentId, updatedFields);
+    }
+  };
+
+  const handleDeleteComparacao = async (id: string) => {
+    if (window.confirm('Tem certeza de que deseja excluir esta cotação de preço?')) {
+      return deleteComparacao(id);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -539,8 +618,8 @@ export default function App() {
                     selectedObraId={selectedObraId}
                     setSelectedObraId={setSelectedObraId}
                     onAddObra={addObra}
-                    onUpdateObra={updateObra}
-                    onDeleteObra={deleteObra}
+                    onUpdateObra={handleUpdateObra}
+                    onDeleteObra={handleDeleteObra}
                     onBootstrap={handleBootstrap}
                   />
                 )}
@@ -552,11 +631,11 @@ export default function App() {
                     entradas={entradas}
                     saidas={saidas}
                     onAddEntrada={addEntrada}
-                    onUpdateEntrada={updateEntrada}
-                    onDeleteEntrada={deleteEntrada}
+                    onUpdateEntrada={handleUpdateEntrada}
+                    onDeleteEntrada={handleDeleteEntrada}
                     onAddSaida={addSaida}
-                    onUpdateSaida={updateSaida}
-                    onDeleteSaida={deleteSaida}
+                    onUpdateSaida={handleUpdateSaida}
+                    onDeleteSaida={handleDeleteSaida}
                   />
                 )}
 
@@ -566,8 +645,8 @@ export default function App() {
                     obra={activeObra}
                     materiais={materiais}
                     onAddMaterial={addMaterial}
-                    onUpdateMaterial={updateMaterial}
-                    onDeleteMaterial={deleteMaterial}
+                    onUpdateMaterial={handleUpdateMaterial}
+                    onDeleteMaterial={handleDeleteMaterial}
                   />
                 )}
 
@@ -577,11 +656,11 @@ export default function App() {
                     obra={activeObra}
                     maoObra={maoObra}
                     onAddMaoObra={addMaoObra}
-                    onUpdateMaoObra={updateMaoObra}
-                    onDeleteMaoObra={deleteMaoObra}
+                    onUpdateMaoObra={handleUpdateMaoObra}
+                    onDeleteMaoObra={handleDeleteMaoObra}
                     onAddMaoObraVale={addMaoObraVale}
-                    onDeleteMaoObraVale={deleteMaoObraVale}
-                    onUpdateMaoObraVale={updateMaoObraVale}
+                    onDeleteMaoObraVale={handleDeleteMaoObraVale}
+                    onUpdateMaoObraVale={handleUpdateMaoObraVale}
                   />
                 )}
 
@@ -591,7 +670,7 @@ export default function App() {
                     obra={activeObra || undefined}
                     comparacoes={comparacoes}
                     onAddComparacao={addComparacao}
-                    onDeleteComparacao={deleteComparacao}
+                    onDeleteComparacao={handleDeleteComparacao}
                   />
                 )}
 

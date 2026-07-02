@@ -106,6 +106,7 @@
         "id": { "type": "string" },
         "usuarioId": { "type": "string" },
         "material": { "type": "string" },
+        "categoria": { "type": "string" },
         "loja": { "type": "string" },
         "valor": { "type": "number" },
         "data": { "type": "string" }

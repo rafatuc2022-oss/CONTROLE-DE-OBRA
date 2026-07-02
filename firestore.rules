@@ -88,7 +88,8 @@ service cloud.firestore {
         && data.material is string && data.material.size() <= 200
         && data.loja is string && data.loja.size() <= 200
         && data.valor is number && data.valor >= 0
-        && data.data is string && data.data.size() <= 50;
+        && data.data is string && data.data.size() <= 50
+        && (!('categoria' in data) || (data.categoria is string && data.categoria.size() <= 100));
     }
 
     // Collection Security Rules
